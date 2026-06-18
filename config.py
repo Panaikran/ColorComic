@@ -1,12 +1,49 @@
 import os
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+from core.paths import ensure_directories, get_app_base_dir, get_runtime_dir
+
+
+BASE_DIR = get_app_base_dir()
+RUNTIME_DIR = get_runtime_dir()
+MODELS_DIR = os.path.join(RUNTIME_DIR, "models")
+WEIGHTS_DIR = os.path.join(MODELS_DIR, "weights")
+CACHE_DIR = os.path.join(RUNTIME_DIR, "cache")
+HF_HOME = os.path.join(CACHE_DIR, "huggingface")
+HF_HUB_CACHE = os.path.join(HF_HOME, "hub")
+LOG_DIR = os.path.join(RUNTIME_DIR, "logs")
+CONFIG_DIR = os.path.join(RUNTIME_DIR, "config")
+CONFIG_FILE = os.path.join(CONFIG_DIR, ".env")
+
+os.environ["HF_HOME"] = HF_HOME
+os.environ["HF_HUB_CACHE"] = HF_HUB_CACHE
+os.environ["HUGGINGFACE_HUB_CACHE"] = HF_HUB_CACHE
+os.environ["TRANSFORMERS_CACHE"] = os.path.join(HF_HOME, "transformers")
+os.environ["DIFFUSERS_CACHE"] = os.path.join(HF_HOME, "diffusers")
+
+ensure_directories(
+    RUNTIME_DIR,
+    os.path.join(RUNTIME_DIR, "uploads"),
+    os.path.join(RUNTIME_DIR, "output"),
+    WEIGHTS_DIR,
+    os.path.join(WEIGHTS_DIR, "manganinja"),
+    HF_HOME,
+    LOG_DIR,
+    CONFIG_DIR,
+)
 
 
 class Config:
     SECRET_KEY = os.environ.get("SECRET_KEY", os.urandom(24).hex())
-    UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
-    OUTPUT_FOLDER = os.path.join(BASE_DIR, "output")
+    BASE_DIR = BASE_DIR
+    RUNTIME_DIR = RUNTIME_DIR
+    CACHE_DIR = CACHE_DIR
+    HF_HOME = HF_HOME
+    HF_HUB_CACHE = HF_HUB_CACHE
+    LOG_DIR = LOG_DIR
+    CONFIG_DIR = CONFIG_DIR
+    CONFIG_FILE = CONFIG_FILE
+    UPLOAD_FOLDER = os.path.join(RUNTIME_DIR, "uploads")
+    OUTPUT_FOLDER = os.path.join(RUNTIME_DIR, "output")
     MAX_CONTENT_LENGTH = 200 * 1024 * 1024  # 200 MB
 
     # Image processing
@@ -14,7 +51,7 @@ class Config:
     PREVIEW_DPI = 150
 
     # ── manga-colorization-v2 (auto mode) ─────────────────────────────
-    WEIGHTS_DIR = os.path.join(BASE_DIR, "models", "weights")
+    WEIGHTS_DIR = WEIGHTS_DIR
     GENERATOR_WEIGHTS_PATH = os.path.join(WEIGHTS_DIR, "generator.zip")
     EXTRACTOR_WEIGHTS_PATH = os.path.join(WEIGHTS_DIR, "extractor.pth")
     DENOISER_WEIGHTS_DIR = os.path.join(WEIGHTS_DIR, "denoiser")
