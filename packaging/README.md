@@ -91,3 +91,39 @@ Confirm:
 - No `uploads`, `output`, or `models\weights` folders appear beside the exe.
 - Runtime folders are created under `%LOCALAPPDATA%\ColorComic`.
 - Model weights are not downloaded until starting an actual colorization job.
+
+## Installer
+
+After the one-folder build exists, compile the unsigned Inno Setup installer:
+
+```powershell
+ISCC.exe packaging\inno\ColorComic.iss
+```
+
+Or use the wrapper:
+
+```powershell
+.\packaging\build_installer.ps1
+```
+
+Expected installer output:
+
+```text
+packaging\inno\output\ColorComic-Setup-0.1.0-win64-cpu.exe
+```
+
+The installer copies `dist\ColorComic` into Program Files, creates a Start Menu
+shortcut, offers an optional desktop shortcut, and registers the normal Windows
+uninstall entry.
+
+Uninstall preserves runtime data by default:
+
+```text
+%LOCALAPPDATA%\ColorComic
+```
+
+To fully remove uploads, outputs, cached model weights, logs, and app config,
+delete that folder manually after uninstalling.
+
+This installer is unsigned. Windows SmartScreen and Microsoft Defender may warn
+or delay first launch until code signing is added.
