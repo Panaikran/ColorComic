@@ -154,7 +154,7 @@ Open **http://127.0.0.1:5000** in your browser. On first run, auto mode weights 
 Install the desktop shell dependency:
 
 ```bash
-pip install -r requirements-desktop.txt
+python -m pip install -r requirements-windows-cpu.txt
 ```
 
 Then launch ColorComic in a desktop window:
@@ -164,6 +164,12 @@ python desktop.py
 ```
 
 Desktop mode starts the same Flask backend on an available `127.0.0.1` port and opens it with pywebview.
+
+To verify the packaging-critical imports in a clean CPU desktop environment:
+
+```bash
+python scripts/verify_dependency_imports.py
+```
 
 ## Usage
 
