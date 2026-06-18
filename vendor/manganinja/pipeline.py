@@ -32,6 +32,25 @@ from .models.unet_2d_condition import UNet2DConditionModel
 from .point_network import PointNet
 
 
+def match_sequence_length(hidden_states: torch.Tensor, sequence_length: int) -> torch.Tensor:
+    """Repeat single-token conditioning to match text encoder sequence length."""
+    if hidden_states.shape[1] == sequence_length:
+        return hidden_states
+    if hidden_states.shape[1] == 1:
+        return hidden_states.repeat(1, sequence_length, 1)
+    raise ValueError(
+        f"Cannot match conditioning sequence length {hidden_states.shape[1]} "
+        f"to text sequence length {sequence_length}"
+    )
+
+
+def prepare_controlnet_condition(condition: torch.Tensor, batch_size: int) -> torch.Tensor:
+    """Repeat a 3-channel control image for classifier-free guidance batches."""
+    if condition.shape[1] != 3:
+        raise ValueError(f"ControlNet condition must have 3 channels, got {condition.shape[1]}")
+    return torch.cat([condition] * batch_size, dim=0)
+
+
 class MangaNinjiaPipeline(DiffusionPipeline):
     """Reference-based manga colorization pipeline.
 
@@ -154,6 +173,7 @@ class MangaNinjiaPipeline(DiffusionPipeline):
             truncation=True, return_tensors="pt",
         ).input_ids.to(device)
         uncond_embeds = self.refnet_text_encoder(uncond_tokens)[0]  # (1, seq, D)
+        clip_hidden = match_sequence_length(clip_hidden, uncond_embeds.shape[1])
 
         # 5. Point embeddings
         point_emb_ref = None
@@ -184,16 +204,11 @@ class MangaNinjiaPipeline(DiffusionPipeline):
         latents = torch.randn(latent_shape, device=device, dtype=dtype, generator=generator)
         latents = latents * self.scheduler.init_noise_sigma
 
-        # 10. Encode lineart for ControlNet
-        lineart_latent = self.vae.encode(
-            lineart_3ch * 2.0 - 1.0  # normalize to [-1, 1]
-        ).latent_dist.sample() * self.vae.config.scaling_factor
-
-        # 11. Build encoder_hidden_states for CFG
+        # 10. Build encoder_hidden_states for CFG
         # 3-way: uncond, ref, ref+point
         encoder_hidden_states = torch.cat([uncond_embeds, clip_hidden, clip_hidden], dim=0)
 
-        # 12. Denoising loop
+        # 11. Denoising loop
         for i, t in enumerate(timesteps):
             # Reference UNet pass (only at step 0)
             if i == 0:
@@ -214,7 +229,7 @@ class MangaNinjiaPipeline(DiffusionPipeline):
             latent_model_input = self.scheduler.scale_model_input(latent_model_input, t)
 
             # ControlNet
-            control_input = torch.cat([lineart_latent] * 3, dim=0)
+            control_input = prepare_controlnet_condition(lineart_3ch, batch_size=3)
             down_block_res, mid_block_res = self.controlnet(
                 latent_model_input,
                 t,

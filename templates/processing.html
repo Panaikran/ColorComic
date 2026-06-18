@@ -96,7 +96,7 @@
         document.getElementById('colorPct').textContent = pct + '%';
 
         if (data.status === 'colorizing') {
-            document.getElementById('stepText').textContent = `Colorizing page ${page + 1}...`;
+            document.getElementById('stepText').textContent = data.step || `Colorizing page ${page + 1}...`;
         }
 
         if (data.status === 'done_page') {

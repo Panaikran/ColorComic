@@ -79,6 +79,34 @@ class Generator(nn.Module):
         return self.model(x)
 
 
+def normalize_lineart_state_dict(state_dict: dict) -> dict:
+    """Convert Annotators checkpoint keys to this vendored Generator layout."""
+    prefixes = ("model0.", "model1.", "model2.", "model3.", "model4.")
+    if not any(key.startswith(prefixes) for key in state_dict):
+        return state_dict
+
+    converted = {}
+    for key, value in state_dict.items():
+        new_key = key
+        if key.startswith("model0."):
+            new_key = "model." + key[len("model0."):]
+        elif key.startswith("model1."):
+            layer_index = int(key.split(".", 2)[1])
+            new_key = "model." + key.split(".", 2)[2]
+            new_key = f"model.{4 + layer_index}.{new_key[len('model.'):]}"
+        elif key.startswith("model2."):
+            block_index = int(key.split(".", 2)[1])
+            new_key = f"model.{10 + block_index}.block." + key.split(".", 3)[3]
+        elif key.startswith("model3."):
+            layer_index = int(key.split(".", 2)[1])
+            new_key = "model." + key.split(".", 2)[2]
+            new_key = f"model.{13 + layer_index}.{new_key[len('model.'):]}"
+        elif key.startswith("model4."):
+            new_key = "model.20." + key.split(".", 2)[2]
+        converted[new_key] = value
+    return converted
+
+
 class BatchLineartDetector:
     """Batch-capable line art detector.
 
@@ -102,7 +130,8 @@ class BatchLineartDetector:
             )
             print("Lineart annotator weights downloaded.")
 
-        self.model.load_state_dict(torch.load(model_path, map_location="cpu"))
+        state_dict = torch.load(model_path, map_location="cpu")
+        self.model.load_state_dict(normalize_lineart_state_dict(state_dict))
         self.model.eval()
 
     def to(self, device, dtype=None):

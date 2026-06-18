@@ -103,6 +103,8 @@ class UNet2DConditionModel(ModelMixin, ConfigMixin):
         self.conv_in = nn.Conv2d(in_channels, block_out_channels[0], kernel_size=3, padding=1)
 
         # Normalize block configs to lists
+        if num_attention_heads is None:
+            num_attention_heads = attention_head_dim
         if isinstance(only_cross_attention, bool):
             only_cross_attention = [only_cross_attention] * len(down_block_types)
         if isinstance(num_attention_heads, int):

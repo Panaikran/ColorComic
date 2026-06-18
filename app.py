@@ -7,6 +7,7 @@ importing it does not start Flask, download model weights, or load ML models.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import queue
 import threading
@@ -17,11 +18,40 @@ from config import Config
 
 jobs = {}
 job_queues = {}
+logger = logging.getLogger(__name__)
 
 _model_manager = None
 _post_processor = None
 _runtime_lock = threading.Lock()
 _torch_runtime_configured = False
+
+
+class ColorizationStepError(RuntimeError):
+    """Wrap a colorization failure with the user-visible processing step."""
+
+    def __init__(self, step: str, message: str):
+        self.step = step
+        super().__init__(f"{step} failed: {message}")
+
+
+def _read_image_or_raise(path: str, step: str, label: str, cv2_module=None):
+    if cv2_module is None:
+        import cv2 as cv2_module
+
+    image = cv2_module.imread(path)
+    if image is None:
+        raise ColorizationStepError(
+            step,
+            f"OpenCV could not read {label} image at {path!r}. "
+            "Check that the file exists and is a supported image format.",
+        )
+    return image
+
+
+def _step_error_message(exc: Exception, fallback_step: str) -> str:
+    if isinstance(exc, ColorizationStepError):
+        return str(exc)
+    return f"{fallback_step} failed: {exc}"
 
 
 def _configure_torch_runtime():
@@ -240,6 +270,7 @@ def create_app():
         os.makedirs(out_dir, exist_ok=True)
 
         def _run():
+            current_step = "startup"
             try:
                 import cv2
                 import torch
@@ -247,32 +278,61 @@ def create_app():
                 from core.color_consistency import ColorConsistencyManager
                 from core.pdf_handler import reassemble_pdf
 
+                current_step = "runtime initialization"
+                job.current_step = current_step
                 model_manager = get_model_manager()
                 post_processor = get_post_processor()
 
+                current_step = "model load"
+                job.current_step = current_step
                 model_manager.switch_device(job.device)
                 colorizer = model_manager.get_colorizer(job.mode)
 
                 ref_image = None
                 if job.mode == "reference" and job.reference_image_path:
-                    ref_image = cv2.imread(job.reference_image_path)
+                    current_step = "reference preprocessing"
+                    job.current_step = current_step
+                    ref_image = _read_image_or_raise(
+                        job.reference_image_path,
+                        current_step,
+                        "reference",
+                        cv2_module=cv2,
+                    )
 
                 consistency = ColorConsistencyManager()
                 colored_paths = []
 
                 with torch.inference_mode():
                     for i, img_path in enumerate(job.page_images):
-                        q.put({"page": i, "total": job.page_count, "status": "colorizing"})
+                        current_step = f"page {i + 1} image loading"
+                        job.current_step = current_step
+                        q.put({
+                            "page": i,
+                            "total": job.page_count,
+                            "status": "colorizing",
+                            "step": current_step,
+                        })
 
-                        image = cv2.imread(img_path)
+                        image = _read_image_or_raise(
+                            img_path,
+                            current_step,
+                            f"page {i + 1}",
+                            cv2_module=cv2,
+                        )
+                        current_step = f"page {i + 1} colorization"
+                        job.current_step = current_step
                         if job.mode == "reference":
                             result = colorizer.colorize(image, reference_image=ref_image)
                         else:
                             result = colorizer.colorize(image)
 
+                        current_step = f"page {i + 1} post-processing"
+                        job.current_step = current_step
                         result = post_processor.process(result, image)
 
                         if job.mode == "auto":
+                            current_step = f"page {i + 1} color consistency"
+                            job.current_step = current_step
                             if i == 0:
                                 consistency.set_reference(result)
                             else:
@@ -287,17 +347,40 @@ def create_app():
                         job.colorized_images.append(out_path)
 
                         job.progress = (i + 1) / job.page_count
-                        q.put({"page": i, "total": job.page_count, "status": "done_page"})
+                        q.put({
+                            "page": i,
+                            "total": job.page_count,
+                            "status": "done_page",
+                            "step": current_step,
+                        })
 
+                current_step = "PDF export"
+                job.current_step = current_step
                 output_pdf = os.path.join(out_dir, "colorized.pdf")
                 reassemble_pdf(colored_paths, output_pdf, job.pdf_path)
                 job.output_pdf = output_pdf
                 job.status = "done"
                 q.put({"done": True})
             except Exception as e:
+                if job.mode == "reference":
+                    logger.exception(
+                        "Reference mode colorization failed for job %s during %s",
+                        job_id,
+                        current_step,
+                    )
+                else:
+                    logger.exception(
+                        "Colorization failed for job %s during %s",
+                        job_id,
+                        current_step,
+                    )
                 job.status = "error"
-                job.current_step = str(e)
-                q.put({"error": str(e), "done": True})
+                job.current_step = current_step
+                q.put({
+                    "error": _step_error_message(e, current_step),
+                    "step": current_step,
+                    "done": True,
+                })
             finally:
                 job_queues.pop(job_id, None)
 

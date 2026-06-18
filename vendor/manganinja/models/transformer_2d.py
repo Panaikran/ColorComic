@@ -39,6 +39,7 @@ class Transformer2DModel(nn.Module):
         activation_fn: str = "geglu",
         only_cross_attention: bool = False,
         double_self_attention: bool = False,
+        use_linear_projection: bool = False,
         upcast_attention: bool = False,
         norm_type: str = "layer_norm",
         norm_elementwise_affine: bool = True,
@@ -47,6 +48,7 @@ class Transformer2DModel(nn.Module):
         super().__init__()
         self.num_attention_heads = num_attention_heads
         self.attention_head_dim = attention_head_dim
+        self.use_linear_projection = use_linear_projection
         inner_dim = num_attention_heads * attention_head_dim
         self.inner_dim = inner_dim
         self.in_channels = in_channels
@@ -55,7 +57,10 @@ class Transformer2DModel(nn.Module):
         self.norm = nn.GroupNorm(
             num_groups=norm_num_groups, num_channels=in_channels, eps=1e-6, affine=True
         )
-        self.proj_in = nn.Linear(in_channels, inner_dim)
+        if use_linear_projection:
+            self.proj_in = nn.Linear(in_channels, inner_dim)
+        else:
+            self.proj_in = nn.Conv2d(in_channels, inner_dim, kernel_size=1, stride=1, padding=0)
 
         self.transformer_blocks = nn.ModuleList([
             BasicTransformerBlock(
@@ -76,7 +81,10 @@ class Transformer2DModel(nn.Module):
             for _ in range(num_layers)
         ])
 
-        self.proj_out = nn.Linear(inner_dim, self.out_channels)
+        if use_linear_projection:
+            self.proj_out = nn.Linear(inner_dim, self.out_channels)
+        else:
+            self.proj_out = nn.Conv2d(inner_dim, self.out_channels, kernel_size=1, stride=1, padding=0)
 
     def forward(
         self,
@@ -93,8 +101,14 @@ class Transformer2DModel(nn.Module):
         residual = hidden_states
 
         hidden_states = self.norm(hidden_states)
-        hidden_states = hidden_states.permute(0, 2, 3, 1).reshape(batch, height * width, channel)
-        hidden_states = self.proj_in(hidden_states)
+        if self.use_linear_projection:
+            hidden_states = hidden_states.permute(0, 2, 3, 1).reshape(batch, height * width, channel)
+            hidden_states = self.proj_in(hidden_states)
+        else:
+            hidden_states = self.proj_in(hidden_states)
+            hidden_states = hidden_states.permute(0, 2, 3, 1).reshape(
+                batch, height * width, self.inner_dim
+            )
 
         ref_feature = None
         for block in self.transformer_blocks:
@@ -110,8 +124,12 @@ class Transformer2DModel(nn.Module):
             # Capture hidden states from last block for reference
             ref_feature = hidden_states
 
-        hidden_states = self.proj_out(hidden_states)
-        hidden_states = hidden_states.reshape(batch, height, width, channel).permute(0, 3, 1, 2)
+        if self.use_linear_projection:
+            hidden_states = self.proj_out(hidden_states)
+            hidden_states = hidden_states.reshape(batch, height, width, self.out_channels).permute(0, 3, 1, 2)
+        else:
+            hidden_states = hidden_states.reshape(batch, height, width, self.inner_dim).permute(0, 3, 1, 2)
+            hidden_states = self.proj_out(hidden_states)
         output = hidden_states + residual
 
         if not return_dict:
