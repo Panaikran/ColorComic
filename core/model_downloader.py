@@ -88,7 +88,7 @@ def ensure_models_downloaded(weights_dir: str, callback=None):
 def ensure_manganinja_downloaded(config, callback=None):
     """Download MangaNinja weights from HuggingFace if not present.
 
-    Downloads 4 ``.pth`` files from the ``Johanan0528/MangaNinja`` repo
+    Downloads 4 ``.pth`` files from the ``Johanan0528/MangaNinjia`` repo
     into *config.MANGANINJA_WEIGHTS_DIR*.
     """
     from huggingface_hub import hf_hub_download

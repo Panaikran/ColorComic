@@ -65,7 +65,7 @@ class Config:
     MANGANINJA_POINTNET = os.path.join(MANGANINJA_WEIGHTS_DIR, "point_net.pth")
     MANGANINJA_CONTROLNET = os.path.join(MANGANINJA_WEIGHTS_DIR, "controlnet.pth")
 
-    MANGANINJA_HF_REPO = "Johanan0528/MangaNinja"
+    MANGANINJA_HF_REPO = "Johanan0528/MangaNinjia"
 
     # Paths for SD 1.5 / CLIP / ControlNet base models (HuggingFace cache)
     SD15_MODEL_PATH = os.environ.get(
