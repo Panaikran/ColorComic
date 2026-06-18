@@ -149,6 +149,22 @@ python app.py
 
 Open **http://127.0.0.1:5000** in your browser. On first run, auto mode weights (~140 MB) are downloaded from Google Drive. Reference mode weights (~6 GB) are downloaded from HuggingFace on first use.
 
+### Desktop mode (Windows)
+
+Install the desktop shell dependency:
+
+```bash
+pip install -r requirements-desktop.txt
+```
+
+Then launch ColorComic in a desktop window:
+
+```bash
+python desktop.py
+```
+
+Desktop mode starts the same Flask backend on an available `127.0.0.1` port and opens it with pywebview.
+
 ## Usage
 
 1. **Upload** — Drop a B&W comic/manga PDF onto the upload page
