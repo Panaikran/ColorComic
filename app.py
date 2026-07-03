@@ -71,6 +71,42 @@ def _download_pdf_path(job_id: str) -> str | None:
     return None
 
 
+def _sanitize_windows_filename_stem(name: str) -> str:
+    invalid_chars = '<>:"/\\|?*'
+    sanitized = []
+    for char in name:
+        if char in invalid_chars or ord(char) < 32:
+            sanitized.append("_")
+        else:
+            sanitized.append(char)
+    result = "".join(sanitized).strip(" .")
+    while "__" in result:
+        result = result.replace("__", "_")
+
+    reserved_names = {
+        "CON",
+        "PRN",
+        "AUX",
+        "NUL",
+        *(f"COM{i}" for i in range(1, 10)),
+        *(f"LPT{i}" for i in range(1, 10)),
+    }
+    if not result or result.upper() in reserved_names:
+        return ""
+    return result[:180].rstrip(" .")
+
+
+def _download_pdf_name(job_id: str) -> str:
+    job = jobs.get(job_id)
+    if job and getattr(job, "pdf_path", None):
+        original_name = os.path.basename(job.pdf_path)
+        original_stem = os.path.splitext(original_name)[0]
+        safe_stem = _sanitize_windows_filename_stem(original_stem)
+        if safe_stem:
+            return f"{safe_stem}-colorized.pdf"
+    return "colorized.pdf"
+
+
 def _configure_torch_runtime():
     """Enable Torch runtime tuning without loading any model weights."""
     global _torch_runtime_configured
@@ -435,7 +471,7 @@ def create_app():
         output_pdf = _download_pdf_path(job_id)
         if not output_pdf:
             return "Not ready", 404
-        return send_file(output_pdf, as_attachment=True, download_name="colorized.pdf")
+        return send_file(output_pdf, as_attachment=True, download_name=_download_pdf_name(job_id))
 
     @app.route("/api/health")
     def health():
