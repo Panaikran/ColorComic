@@ -48,17 +48,50 @@ function selectFile(file) {
 const modeRadios = document.querySelectorAll('input[name="mode"]');
 const referenceSection = document.getElementById('referenceSection');
 
+function updateModeSection() {
+    const isReference = getSelectedMode() === 'reference';
+    referenceSection.style.display = isReference ? 'block' : 'none';
+    updateUploadButtonState();
+}
+
 modeRadios.forEach(radio => {
-    radio.addEventListener('change', () => {
-        const isReference = radio.value === 'reference' && radio.checked;
-        referenceSection.style.display = isReference ? 'block' : 'none';
-        updateUploadButtonState();
-    });
+    radio.addEventListener('change', updateModeSection);
 });
 
 function getSelectedMode() {
     const checked = document.querySelector('input[name="mode"]:checked');
     return checked ? checked.value : 'auto';
+}
+
+function applyModePreference(defaultMode) {
+    if (defaultMode !== 'auto' && defaultMode !== 'reference') return;
+
+    const preferredMode = document.querySelector(`input[name="mode"][value="${defaultMode}"]`);
+    if (!preferredMode) return;
+
+    preferredMode.checked = true;
+    updateModeSection();
+}
+
+function applyDevicePreference(defaultDevice) {
+    if (defaultDevice !== 'cpu') return;
+
+    const cpuDevice = document.querySelector('input[name="device"][value="cpu"]');
+    if (cpuDevice) cpuDevice.checked = true;
+}
+
+async function loadPreferences() {
+    try {
+        const response = await fetch('/api/preferences');
+        if (!response.ok) return;
+        const data = await response.json();
+        const preferences = data && data.preferences ? data.preferences : {};
+
+        applyModePreference(preferences.default_mode);
+        applyDevicePreference(preferences.default_device);
+    } catch (error) {
+        // Keep the built-in form defaults when preferences are unavailable.
+    }
 }
 
 // ── Reference Image Upload ──────────────────────────────────────────────────
@@ -443,4 +476,5 @@ async function loadRecentOutputs() {
 }
 
 document.addEventListener('pywebviewready', loadRecentOutputs);
+loadPreferences();
 loadRecentOutputs();
