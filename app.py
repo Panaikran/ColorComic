@@ -14,6 +14,7 @@ import threading
 import uuid
 
 from config import Config
+from core.preflight import validate_colorize_preflight
 
 
 jobs = {}
@@ -52,6 +53,13 @@ def _step_error_message(exc: Exception, fallback_step: str) -> str:
     if isinstance(exc, ColorizationStepError):
         return str(exc)
     return f"{fallback_step} failed: {exc}"
+
+
+def _preflight_error_message(errors) -> str:
+    messages = [error.message for error in errors]
+    if not messages:
+        return "Preflight failed"
+    return "; ".join(messages)
 
 
 def _model_progress_message(mode: str, message: str) -> str:
@@ -354,8 +362,19 @@ def create_app():
         q = queue.Queue()
         job_queues[job_id] = q
 
-        out_dir = os.path.join(Config.OUTPUT_FOLDER, job_id)
-        os.makedirs(out_dir, exist_ok=True)
+        preflight = validate_colorize_preflight(job.pdf_path, job_id, Config.OUTPUT_FOLDER)
+        if not preflight.ok:
+            current_step = preflight.errors[0].step if preflight.errors else "preflight"
+            job.status = "error"
+            job.current_step = current_step
+            q.put({
+                "error": f"{current_step} failed: {_preflight_error_message(preflight.errors)}",
+                "step": current_step,
+                "done": True,
+            })
+            return jsonify({"ok": True})
+
+        out_dir = preflight.output_dir
 
         def _run():
             current_step = "startup"
@@ -491,6 +510,7 @@ def create_app():
                     event = q.get(timeout=30)
                     yield f"data: {json.dumps(event)}\n\n"
                     if event.get("done"):
+                        job_queues.pop(job_id, None)
                         break
                 except queue.Empty:
                     yield f"data: {json.dumps({'heartbeat': True})}\n\n"
