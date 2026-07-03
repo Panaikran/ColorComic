@@ -15,7 +15,7 @@ import uuid
 from datetime import datetime, timezone
 
 from config import Config
-from core.job_history import JobHistoryEntry, append_job_history
+from core.job_history import JobHistoryEntry, append_job_history, load_job_history
 from core.preflight import validate_colorize_preflight
 
 
@@ -175,6 +175,35 @@ def _record_completed_job_history(job, output_pdf: str, history_path: str | None
         logger.exception("Failed to write job history for job %s", job.job_id)
         return False
     return True
+
+
+def _is_runtime_output_path(path: str, output_folder: str | None = None) -> bool:
+    if not path:
+        return False
+    output_root = os.path.abspath(output_folder or Config.OUTPUT_FOLDER)
+    candidate = os.path.abspath(path)
+    try:
+        common = os.path.commonpath([output_root, candidate])
+    except ValueError:
+        return False
+    return os.path.normcase(common) == os.path.normcase(output_root)
+
+
+def _recent_job_payload(entry: JobHistoryEntry) -> dict:
+    output_pdf_safe = _is_runtime_output_path(entry.output_pdf_path)
+    output_pdf_exists = output_pdf_safe and os.path.isfile(entry.output_pdf_path)
+    payload = {
+        "job_id": entry.job_id,
+        "original_filename": entry.original_filename,
+        "mode": entry.mode,
+        "completed_at": entry.completed_at,
+        "output_pdf_path": entry.output_pdf_path if output_pdf_safe else None,
+        "output_pdf_exists": output_pdf_exists,
+        "output_pdf_safe": output_pdf_safe,
+    }
+    if entry.page_count is not None:
+        payload["page_count"] = entry.page_count
+    return payload
 
 
 def _configure_torch_runtime():
@@ -565,6 +594,15 @@ def create_app():
         if not output_pdf:
             return "Not ready", 404
         return send_file(output_pdf, as_attachment=True, download_name=_download_pdf_name(job_id))
+
+    @app.route("/api/recent-jobs")
+    def recent_jobs():
+        entries = sorted(
+            load_job_history(),
+            key=lambda entry: entry.completed_at,
+            reverse=True,
+        )
+        return jsonify({"jobs": [_recent_job_payload(entry) for entry in entries]})
 
     @app.route("/api/health")
     def health():
