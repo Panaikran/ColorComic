@@ -67,6 +67,18 @@ class DesktopLauncherTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Invalid job id"):
                 desktop.resolve_output_folder("../outside", output_root=output_root)
 
+    def test_resolve_output_pdf_stays_inside_output_root(self):
+        desktop = importlib.import_module("desktop")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_root = os.path.join(temp_dir, "output")
+            expected = os.path.join(output_root, "job-1", "colorized.pdf")
+
+            self.assertEqual(
+                desktop.resolve_output_pdf("job-1", output_root=output_root),
+                os.path.abspath(expected),
+            )
+
     def test_desktop_api_opens_existing_output_folder(self):
         desktop = importlib.import_module("desktop")
         opened = []
@@ -94,6 +106,54 @@ class DesktopLauncherTests(unittest.TestCase):
         self.assertEqual(result["ok"], False)
         self.assertIn("not found", result["error"])
         self.assertEqual(opened, [])
+
+    def test_desktop_api_reveals_existing_output_pdf(self):
+        desktop = importlib.import_module("desktop")
+        revealed = []
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_root = os.path.join(temp_dir, "output")
+            output_folder = os.path.join(output_root, "job-1")
+            os.makedirs(output_folder)
+            output_pdf = os.path.join(output_folder, "colorized.pdf")
+            with open(output_pdf, "wb") as handle:
+                handle.write(b"%PDF-1.4")
+            api = desktop.DesktopApi(output_root=output_root, pdf_revealer=revealed.append)
+
+            result = api.open_output_pdf("job-1")
+
+        self.assertEqual(result["ok"], True)
+        self.assertEqual(revealed, [os.path.abspath(output_pdf)])
+
+    def test_desktop_api_reports_missing_output_pdf(self):
+        desktop = importlib.import_module("desktop")
+        revealed = []
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_root = os.path.join(temp_dir, "output")
+            os.makedirs(os.path.join(output_root, "job-1"))
+            api = desktop.DesktopApi(output_root=output_root, pdf_revealer=revealed.append)
+
+            result = api.open_output_pdf("job-1")
+
+        self.assertEqual(result["ok"], False)
+        self.assertIn("not found", result["error"])
+        self.assertEqual(revealed, [])
+
+    def test_desktop_api_rejects_invalid_output_pdf_job_id(self):
+        desktop = importlib.import_module("desktop")
+        revealed = []
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            api = desktop.DesktopApi(output_root=os.path.join(temp_dir, "output"), pdf_revealer=revealed.append)
+
+            with mock.patch.object(desktop.LOGGER, "exception") as log_exception:
+                result = api.open_output_pdf("..\\outside")
+
+        self.assertEqual(result["ok"], False)
+        self.assertIn("Invalid job id", result["error"])
+        self.assertEqual(revealed, [])
+        log_exception.assert_called_once()
 
     def test_wait_for_backend_returns_when_health_is_ready(self):
         desktop = importlib.import_module("desktop")

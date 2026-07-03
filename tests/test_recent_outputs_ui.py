@@ -24,7 +24,18 @@ class RecentOutputsUiTests(unittest.TestCase):
         self.assertIn("output_pdf_exists", script)
         self.assertIn("output_pdf_safe", script)
         self.assertIn("window.pywebview.api.open_output_folder", script)
+        self.assertIn("window.pywebview.api.open_output_pdf", script)
+        self.assertIn("Show PDF", script)
         self.assertIn("/api/download/", script)
+
+    def test_processing_page_supports_desktop_pdf_reveal_action(self):
+        root = os.getcwd()
+        with open(os.path.join(root, "templates", "processing.html"), encoding="utf-8") as handle:
+            template = handle.read()
+
+        self.assertIn('id="revealOutputPdfBtn"', template)
+        self.assertIn("window.pywebview.api.open_output_pdf", template)
+        self.assertIn("Show PDF in Folder", template)
 
 
 if __name__ == "__main__":

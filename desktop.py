@@ -6,6 +6,7 @@ import logging
 import os
 import re
 import socket
+import subprocess
 import sys
 import threading
 import time
@@ -16,6 +17,7 @@ HOST = "127.0.0.1"
 APP_TITLE = "ColorComic"
 LOGGER = logging.getLogger("colorcomic.desktop")
 SAFE_JOB_ID_PATTERN = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+OUTPUT_PDF_NAME = "colorized.pdf"
 
 
 def find_free_port() -> int:
@@ -93,12 +95,34 @@ def resolve_output_folder(job_id: str, output_root: str | None = None) -> str:
     return output_folder
 
 
+def resolve_output_pdf(job_id: str, output_root: str | None = None) -> str:
+    """Return the generated PDF path for *job_id*, rejecting path escapes."""
+    output_folder = resolve_output_folder(job_id, output_root=output_root)
+    output_pdf = os.path.abspath(os.path.join(output_folder, OUTPUT_PDF_NAME))
+
+    if output_root is None:
+        from config import Config
+
+        output_root = Config.OUTPUT_FOLDER
+
+    output_root_abs = os.path.abspath(output_root)
+    if os.path.commonpath([output_root_abs, output_pdf]) != output_root_abs:
+        raise ValueError("Output PDF escapes the runtime output directory")
+    return output_pdf
+
+
+def reveal_in_explorer(path: str) -> None:
+    """Reveal *path* in Windows Explorer."""
+    subprocess.Popen(["explorer", f"/select,{path}"])
+
+
 class DesktopApi:
     """Methods exposed to the pywebview JavaScript bridge."""
 
-    def __init__(self, output_root: str | None = None, opener=None):
+    def __init__(self, output_root: str | None = None, opener=None, pdf_revealer=None):
         self._output_root = output_root
         self._opener = opener or os.startfile
+        self._pdf_revealer = pdf_revealer or reveal_in_explorer
 
     def open_output_folder(self, job_id: str) -> dict:
         try:
@@ -109,6 +133,17 @@ class DesktopApi:
             return {"ok": True, "path": output_folder}
         except Exception as exc:
             LOGGER.exception("Failed to open output folder for job %r", job_id)
+            return {"ok": False, "error": str(exc)}
+
+    def open_output_pdf(self, job_id: str) -> dict:
+        try:
+            output_pdf = resolve_output_pdf(job_id, output_root=self._output_root)
+            if not os.path.isfile(output_pdf):
+                return {"ok": False, "error": "Output PDF not found.", "path": output_pdf}
+            self._pdf_revealer(output_pdf)
+            return {"ok": True, "path": output_pdf}
+        except Exception as exc:
+            LOGGER.exception("Failed to reveal output PDF for job %r", job_id)
             return {"ok": False, "error": str(exc)}
 
 

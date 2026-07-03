@@ -46,6 +46,7 @@
             <p class="text-dim mt-1">Your comic has been colorized successfully.</p>
             <div class="flex mt-2" style="justify-content:center; gap:0.75rem;">
                 <a id="downloadPdfBtn" href="/api/download/{{ job.job_id }}" class="btn btn-primary">Download Colored PDF</a>
+                <button id="revealOutputPdfBtn" class="btn btn-secondary" type="button" style="display:none;">Show PDF in Folder</button>
                 <button id="openOutputFolderBtn" class="btn btn-secondary" type="button" style="display:none;">Open Output Folder</button>
                 <a href="/preview/{{ job.job_id }}" class="btn btn-secondary">Review Pages</a>
             </div>
@@ -66,40 +67,54 @@
 <script>
     const JOB_ID = "{{ job.job_id }}";
     const PAGE_COUNT = {{ job.page_count }};
+    const revealOutputPdfBtn = document.getElementById('revealOutputPdfBtn');
     const openOutputFolderBtn = document.getElementById('openOutputFolderBtn');
     const openOutputFolderError = document.getElementById('openOutputFolderError');
 
     const evtSource = new EventSource(`/api/colorize/${JOB_ID}/stream`);
 
     function configureDesktopOutputFolderButton() {
-        if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.open_output_folder) {
+        if (!window.pywebview || !window.pywebview.api) {
             return;
         }
-        openOutputFolderBtn.style.display = '';
+        if (window.pywebview.api.open_output_pdf) {
+            revealOutputPdfBtn.style.display = '';
+        }
+        if (window.pywebview.api.open_output_folder) {
+            openOutputFolderBtn.style.display = '';
+        }
     }
 
     document.addEventListener('pywebviewready', configureDesktopOutputFolderButton);
     configureDesktopOutputFolderButton();
 
-    openOutputFolderBtn.onclick = async function() {
+    async function runDesktopOutputAction(button, actionName, fallbackMessage) {
         openOutputFolderError.style.display = 'none';
-        openOutputFolderBtn.disabled = true;
+        button.disabled = true;
         try {
-            const result = await window.pywebview.api.open_output_folder(JOB_ID);
+            const result = await window.pywebview.api[actionName](JOB_ID);
             if (!result || !result.ok) {
                 openOutputFolderError.textContent = (result && result.error)
                     ? result.error
-                    : 'Could not open the output folder.';
+                    : fallbackMessage;
                 openOutputFolderError.style.display = 'block';
             }
         } catch (error) {
             openOutputFolderError.textContent = error && error.message
                 ? error.message
-                : 'Could not open the output folder.';
+                : fallbackMessage;
             openOutputFolderError.style.display = 'block';
         } finally {
-            openOutputFolderBtn.disabled = false;
+            button.disabled = false;
         }
+    }
+
+    revealOutputPdfBtn.onclick = async function() {
+        await runDesktopOutputAction(revealOutputPdfBtn, 'open_output_pdf', 'Could not show the PDF in Explorer.');
+    };
+
+    openOutputFolderBtn.onclick = async function() {
+        await runDesktopOutputAction(openOutputFolderBtn, 'open_output_folder', 'Could not open the output folder.');
     };
 
     evtSource.onmessage = function(event) {

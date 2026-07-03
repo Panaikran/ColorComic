@@ -267,6 +267,14 @@ function canOpenOutputFolder() {
     );
 }
 
+function canOpenOutputPdf() {
+    return Boolean(
+        window.pywebview
+        && window.pywebview.api
+        && window.pywebview.api.open_output_pdf
+    );
+}
+
 function formatMode(mode) {
     if (mode === 'reference') return 'Reference';
     return 'Auto';
@@ -319,6 +327,25 @@ async function openRecentOutputFolder(jobId, statusElement, button) {
     }
 }
 
+async function openRecentOutputPdf(jobId, statusElement, button) {
+    statusElement.textContent = '';
+    button.disabled = true;
+    try {
+        const result = await window.pywebview.api.open_output_pdf(jobId);
+        if (!result || !result.ok) {
+            statusElement.textContent = result && result.error
+                ? result.error
+                : 'Could not show the PDF in Explorer.';
+        }
+    } catch (error) {
+        statusElement.textContent = error && error.message
+            ? error.message
+            : 'Could not show the PDF in Explorer.';
+    } finally {
+        button.disabled = false;
+    }
+}
+
 function renderRecentOutput(job) {
     const item = document.createElement('article');
     item.className = 'recent-output-item';
@@ -350,6 +377,17 @@ function renderRecentOutput(job) {
         download.href = `/api/download/${encodeURIComponent(job.job_id)}`;
         download.textContent = 'Download';
         actions.appendChild(download);
+
+        if (canOpenOutputPdf()) {
+            const revealPdf = document.createElement('button');
+            revealPdf.className = 'btn btn-secondary btn-sm';
+            revealPdf.type = 'button';
+            revealPdf.textContent = 'Show PDF';
+            revealPdf.addEventListener('click', () => {
+                openRecentOutputPdf(job.job_id, actionStatus, revealPdf);
+            });
+            actions.appendChild(revealPdf);
+        }
 
         if (canOpenOutputFolder()) {
             const openFolder = document.createElement('button');
