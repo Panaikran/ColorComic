@@ -143,7 +143,7 @@ class ColorizePreflightRouteTests(unittest.TestCase):
             )
             app.threading.Thread = FakeThread
             app.validate_colorize_preflight = (
-                lambda pdf_path, job_id, output_folder: types.SimpleNamespace(
+                lambda pdf_path, job_id, output_folder, **kwargs: types.SimpleNamespace(
                     ok=True,
                     output_dir=os.path.join(output_folder, job_id),
                     errors=(),
@@ -161,6 +161,80 @@ class ColorizePreflightRouteTests(unittest.TestCase):
         self.assertEqual(app.jobs[job_id].status, "colorizing")
         self.assertTrue(FakeThread.instances)
         self.assertTrue(FakeThread.instances[0].started)
+
+    def test_reference_preflight_failure_stops_before_model_load(self):
+        app = self.app_module
+        model_load_called = {"value": False}
+
+        def fail_if_model_loads():
+            model_load_called["value"] = True
+            raise AssertionError("model manager should not be created")
+
+        original_get_model_manager = app.get_model_manager
+        original_output_folder = app.Config.OUTPUT_FOLDER
+        original_preflight = app.validate_colorize_preflight
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            pdf_path = os.path.join(temp_dir, "input.pdf")
+            with open(pdf_path, "wb") as handle:
+                handle.write(b"%PDF-1.4\n")
+
+            app.Config.OUTPUT_FOLDER = os.path.join(temp_dir, "output")
+            job_id = "reference-preflight-fail"
+            app.jobs[job_id] = types.SimpleNamespace(
+                job_id=job_id,
+                pdf_path=pdf_path,
+                page_count=1,
+                page_images=[],
+                colorized_images=[],
+                status="uploaded",
+                progress=0.0,
+                current_step="",
+                style="auto",
+                device="auto",
+                mode="reference",
+                reference_image_path=os.path.join(temp_dir, "missing-reference.png"),
+                output_pdf=None,
+            )
+            app.get_model_manager = fail_if_model_loads
+
+            def fail_reference_preflight(
+                pdf_path,
+                job_id,
+                output_folder,
+                mode,
+                reference_image_path,
+            ):
+                return types.SimpleNamespace(
+                    ok=False,
+                    errors=(
+                        types.SimpleNamespace(
+                            code="reference_missing",
+                            message="Reference image does not exist",
+                            step="reference preflight",
+                        ),
+                    ),
+                    output_dir=os.path.join(output_folder, job_id),
+                )
+
+            app.validate_colorize_preflight = fail_reference_preflight
+
+            try:
+                response = self.flask_app.routes["/api/colorize/<job_id>"](job_id)
+                stream_response = self.flask_app.routes["/api/colorize/<job_id>/stream"](job_id)
+                generator = stream_response[1][0]
+                payload = json.loads(next(generator).removeprefix("data: ").strip())
+            finally:
+                app.get_model_manager = original_get_model_manager
+                app.Config.OUTPUT_FOLDER = original_output_folder
+                app.validate_colorize_preflight = original_preflight
+
+        self.assertEqual(response, {"ok": True})
+        self.assertFalse(model_load_called["value"])
+        self.assertEqual(app.jobs[job_id].status, "error")
+        self.assertEqual(payload["done"], True)
+        self.assertEqual(payload["step"], "reference preflight")
+        self.assertIn("reference preflight failed:", payload["error"])
 
 
 if __name__ == "__main__":

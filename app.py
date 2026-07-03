@@ -362,7 +362,13 @@ def create_app():
         q = queue.Queue()
         job_queues[job_id] = q
 
-        preflight = validate_colorize_preflight(job.pdf_path, job_id, Config.OUTPUT_FOLDER)
+        preflight = validate_colorize_preflight(
+            job.pdf_path,
+            job_id,
+            Config.OUTPUT_FOLDER,
+            mode=getattr(job, "mode", "auto"),
+            reference_image_path=getattr(job, "reference_image_path", None),
+        )
         if not preflight.ok:
             current_step = preflight.errors[0].step if preflight.errors else "preflight"
             job.status = "error"

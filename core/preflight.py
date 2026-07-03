@@ -9,6 +9,7 @@ from typing import Callable
 
 
 PageCountReader = Callable[[str], int]
+ImageReader = Callable[[str], object]
 
 
 @dataclass(frozen=True)
@@ -31,6 +32,7 @@ class PreflightResult:
     pdf_path: str
     output_dir: str | None
     page_count: int | None
+    reference_image_path: str | None
     errors: tuple[PreflightError, ...]
 
     def as_dict(self) -> dict[str, object]:
@@ -39,6 +41,7 @@ class PreflightResult:
             "pdf_path": self.pdf_path,
             "output_dir": self.output_dir,
             "page_count": self.page_count,
+            "reference_image_path": self.reference_image_path,
             "errors": [error.as_dict() for error in self.errors],
         }
 
@@ -47,6 +50,12 @@ def _default_page_count_reader(pdf_path: str) -> int:
     from core.pdf_handler import get_page_count
 
     return get_page_count(pdf_path)
+
+
+def _default_image_reader(image_path: str):
+    import cv2
+
+    return cv2.imread(image_path)
 
 
 def _resolve_output_job_dir(output_folder: str, job_id: str) -> str:
@@ -88,11 +97,98 @@ def _check_output_dir(output_folder: str, job_id: str) -> tuple[str | None, list
     return output_dir, errors
 
 
+def _image_has_valid_dimensions(image) -> bool:
+    shape = getattr(image, "shape", None)
+    if not shape or len(shape) < 2:
+        return False
+    height, width = shape[:2]
+    return height > 0 and width > 0
+
+
+def _check_reference_image(
+    reference_image_path: str | None,
+    image_reader: ImageReader | None,
+) -> list[PreflightError]:
+    if not reference_image_path:
+        return [
+            PreflightError(
+                code="reference_missing",
+                message="Reference mode requires a reference image",
+                step="reference preflight",
+            )
+        ]
+
+    if not os.path.exists(reference_image_path):
+        return [
+            PreflightError(
+                code="reference_missing",
+                message="Reference image does not exist",
+                step="reference preflight",
+            )
+        ]
+
+    if not os.path.isfile(reference_image_path):
+        return [
+            PreflightError(
+                code="reference_not_file",
+                message="Reference image path is not a file",
+                step="reference preflight",
+            )
+        ]
+
+    try:
+        with open(reference_image_path, "rb") as handle:
+            handle.read(1)
+    except OSError as exc:
+        return [
+            PreflightError(
+                code="reference_not_readable",
+                message=f"Reference image is not readable: {exc}",
+                step="reference preflight",
+            )
+        ]
+
+    try:
+        reader = image_reader or _default_image_reader
+        image = reader(reference_image_path)
+    except Exception as exc:
+        return [
+            PreflightError(
+                code="reference_unreadable",
+                message=f"Reference image could not be opened: {exc}",
+                step="reference preflight",
+            )
+        ]
+
+    if image is None:
+        return [
+            PreflightError(
+                code="reference_unreadable",
+                message="Reference image could not be decoded",
+                step="reference preflight",
+            )
+        ]
+
+    if not _image_has_valid_dimensions(image):
+        return [
+            PreflightError(
+                code="reference_invalid_dimensions",
+                message="Reference image has invalid dimensions",
+                step="reference preflight",
+            )
+        ]
+
+    return []
+
+
 def validate_colorize_preflight(
     pdf_path: str,
     job_id: str,
     output_folder: str,
     page_count_reader: PageCountReader | None = None,
+    mode: str = "auto",
+    reference_image_path: str | None = None,
+    image_reader: ImageReader | None = None,
 ) -> PreflightResult:
     """Validate uploaded PDF and output directory before CPU-heavy processing."""
     errors: list[PreflightError] = []
@@ -150,11 +246,14 @@ def validate_colorize_preflight(
 
     output_dir, output_errors = _check_output_dir(output_folder, job_id)
     errors.extend(output_errors)
+    if mode == "reference":
+        errors.extend(_check_reference_image(reference_image_path, image_reader))
 
     return PreflightResult(
         ok=not errors,
         pdf_path=pdf_path,
         output_dir=output_dir,
         page_count=page_count,
+        reference_image_path=reference_image_path,
         errors=tuple(errors),
     )

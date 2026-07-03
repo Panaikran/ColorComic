@@ -5,6 +5,11 @@ import unittest
 from core.preflight import validate_colorize_preflight
 
 
+class FakeImage:
+    def __init__(self, shape):
+        self.shape = shape
+
+
 class PreflightTests(unittest.TestCase):
     def test_valid_pdf_and_output_path_pass(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -104,6 +109,90 @@ class PreflightTests(unittest.TestCase):
             self.assertEqual(payload["ok"], False)
             self.assertEqual(payload["errors"][0]["code"], "pdf_missing")
             self.assertEqual(payload["errors"][0]["step"], "PDF preflight")
+
+    def test_reference_mode_requires_reference_image_path(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            pdf_path = os.path.join(temp_dir, "input.pdf")
+            with open(pdf_path, "wb") as handle:
+                handle.write(b"%PDF-1.4\n")
+
+            result = validate_colorize_preflight(
+                pdf_path,
+                "job-123",
+                os.path.join(temp_dir, "output"),
+                page_count_reader=lambda path: 1,
+                mode="reference",
+            )
+
+            self.assertFalse(result.ok)
+            self.assertEqual(result.errors[0].code, "reference_missing")
+            self.assertEqual(result.errors[0].step, "reference preflight")
+
+    def test_reference_mode_rejects_undecodable_reference_image(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            pdf_path = os.path.join(temp_dir, "input.pdf")
+            ref_path = os.path.join(temp_dir, "reference.png")
+            with open(pdf_path, "wb") as handle:
+                handle.write(b"%PDF-1.4\n")
+            with open(ref_path, "wb") as handle:
+                handle.write(b"not an image")
+
+            result = validate_colorize_preflight(
+                pdf_path,
+                "job-123",
+                os.path.join(temp_dir, "output"),
+                page_count_reader=lambda path: 1,
+                mode="reference",
+                reference_image_path=ref_path,
+                image_reader=lambda path: None,
+            )
+
+            self.assertFalse(result.ok)
+            self.assertEqual(result.errors[0].code, "reference_unreadable")
+
+    def test_reference_mode_rejects_invalid_reference_dimensions(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            pdf_path = os.path.join(temp_dir, "input.pdf")
+            ref_path = os.path.join(temp_dir, "reference.png")
+            with open(pdf_path, "wb") as handle:
+                handle.write(b"%PDF-1.4\n")
+            with open(ref_path, "wb") as handle:
+                handle.write(b"image")
+
+            result = validate_colorize_preflight(
+                pdf_path,
+                "job-123",
+                os.path.join(temp_dir, "output"),
+                page_count_reader=lambda path: 1,
+                mode="reference",
+                reference_image_path=ref_path,
+                image_reader=lambda path: FakeImage((0, 100, 3)),
+            )
+
+            self.assertFalse(result.ok)
+            self.assertEqual(result.errors[0].code, "reference_invalid_dimensions")
+
+    def test_reference_mode_accepts_readable_reference_image(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            pdf_path = os.path.join(temp_dir, "input.pdf")
+            ref_path = os.path.join(temp_dir, "reference.png")
+            with open(pdf_path, "wb") as handle:
+                handle.write(b"%PDF-1.4\n")
+            with open(ref_path, "wb") as handle:
+                handle.write(b"image")
+
+            result = validate_colorize_preflight(
+                pdf_path,
+                "job-123",
+                os.path.join(temp_dir, "output"),
+                page_count_reader=lambda path: 1,
+                mode="reference",
+                reference_image_path=ref_path,
+                image_reader=lambda path: FakeImage((100, 200, 3)),
+            )
+
+            self.assertTrue(result.ok)
+            self.assertEqual(result.reference_image_path, ref_path)
 
 
 if __name__ == "__main__":
