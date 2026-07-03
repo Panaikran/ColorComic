@@ -13,6 +13,8 @@ HF_HUB_CACHE = os.path.join(HF_HOME, "hub")
 LOG_DIR = os.path.join(RUNTIME_DIR, "logs")
 CONFIG_DIR = os.path.join(RUNTIME_DIR, "config")
 CONFIG_FILE = os.path.join(CONFIG_DIR, ".env")
+APP_ICON_STATIC_PATH = "img/colorcomic.ico"
+APP_ICON_PATH = os.path.join(BASE_DIR, "static", "img", "colorcomic.ico")
 
 os.environ["HF_HOME"] = HF_HOME
 os.environ["HF_HUB_CACHE"] = HF_HUB_CACHE
@@ -42,6 +44,8 @@ class Config:
     LOG_DIR = LOG_DIR
     CONFIG_DIR = CONFIG_DIR
     CONFIG_FILE = CONFIG_FILE
+    APP_ICON_STATIC_PATH = APP_ICON_STATIC_PATH
+    APP_ICON_PATH = APP_ICON_PATH
     UPLOAD_FOLDER = os.path.join(RUNTIME_DIR, "uploads")
     OUTPUT_FOLDER = os.path.join(RUNTIME_DIR, "output")
     MAX_CONTENT_LENGTH = 200 * 1024 * 1024  # 200 MB

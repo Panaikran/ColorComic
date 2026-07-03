@@ -164,6 +164,7 @@ python desktop.py
 ```
 
 Desktop mode starts the same Flask backend on an available `127.0.0.1` port and opens it with pywebview.
+The Windows desktop/package icon is shared from `static/img/colorcomic.ico`.
 
 To verify the packaging-critical imports in a clean CPU desktop environment:
 

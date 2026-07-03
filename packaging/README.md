@@ -109,12 +109,15 @@ Or use the wrapper:
 Expected installer output:
 
 ```text
-packaging\inno\output\ColorComic-Setup-0.1.0-win64-cpu.exe
+packaging\inno\output\ColorComic-Setup-0.1.1-win64-cpu.exe
 ```
 
 The installer copies `dist\ColorComic` into Program Files, creates a Start Menu
 shortcut, offers an optional desktop shortcut, and registers the normal Windows
 uninstall entry.
+
+The app, installer, and shortcuts use the shared icon asset at
+`static\img\colorcomic.ico`.
 
 Uninstall preserves runtime data by default:
 

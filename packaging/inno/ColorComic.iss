@@ -3,9 +3,10 @@
 ;   ISCC.exe packaging\inno\ColorComic.iss
 
 #define MyAppName "ColorComic"
-#define MyAppVersion "0.1.0"
+#define MyAppVersion "0.1.1"
 #define MyAppPublisher "ColorComic"
 #define MyAppExeName "ColorComic.exe"
+#define MyAppIcon "..\..\static\img\colorcomic.ico"
 
 [Setup]
 AppId={{7D3E6C93-5726-4F99-A712-7C56AF830D4F}
@@ -24,7 +25,8 @@ WizardStyle=modern
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=admin
-UninstallDisplayIcon={app}\{#MyAppExeName}
+SetupIconFile={#MyAppIcon}
+UninstallDisplayIcon={app}\static\img\colorcomic.ico
 SetupLogging=yes
 CloseApplications=yes
 RestartApplications=no
@@ -41,8 +43,8 @@ Source: "..\README.md"; DestDir: "{app}\docs"; DestName: "PACKAGING_README.md"; 
 Source: "..\VALIDATION.md"; DestDir: "{app}\docs"; DestName: "VALIDATION.md"; Flags: ignoreversion
 
 [Icons]
-Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
-Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\static\img\colorcomic.ico"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"; IconFilename: "{app}\static\img\colorcomic.ico"; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: nowait postinstall skipifsilent unchecked

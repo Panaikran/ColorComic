@@ -186,6 +186,10 @@ def create_app():
             current_device=current_device,
         )
 
+    @app.route("/favicon.ico")
+    def favicon():
+        return send_file(Config.APP_ICON_PATH, mimetype="image/x-icon")
+
     @app.route("/preview/<job_id>")
     def preview_view(job_id):
         job = jobs.get(job_id)

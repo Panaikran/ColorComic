@@ -13,6 +13,7 @@ from PyInstaller.utils.hooks import (
 
 
 PROJECT_ROOT = Path(SPECPATH).parent
+APP_ICON = PROJECT_ROOT / "static" / "img" / "colorcomic.ico"
 BUILD_CACHE = PROJECT_ROOT / "build" / "hf-cache"
 BUILD_CACHE.mkdir(parents=True, exist_ok=True)
 os.environ["HF_HOME"] = str(BUILD_CACHE)
@@ -185,6 +186,7 @@ exe = EXE(
     upx=True,
     console=False,
     disable_windowed_traceback=False,
+    icon=str(APP_ICON),
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,

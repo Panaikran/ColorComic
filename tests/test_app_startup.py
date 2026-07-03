@@ -113,6 +113,22 @@ class AppStartupTests(unittest.TestCase):
         self.assertIn("/api/status", flask_app.routes)
         self.assertEqual(flask_app.routes["/api/status"]()["model_loaded"], False)
 
+    def test_create_app_registers_favicon_route(self):
+        install_fake_flask()
+        imported = importlib.import_module("app")
+
+        flask_app = imported.create_app()
+
+        self.assertIn("/favicon.ico", flask_app.routes)
+        self.assertEqual(
+            flask_app.routes["/favicon.ico"](),
+            (
+                "send_file",
+                (imported.Config.APP_ICON_PATH,),
+                {"mimetype": "image/x-icon"},
+            ),
+        )
+
     def test_run_dev_server_remains_available(self):
         install_fake_flask()
         imported = importlib.import_module("app")
