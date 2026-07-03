@@ -68,6 +68,11 @@ def start_backend(port: int) -> threading.Thread:
     return thread
 
 
+def configure_webview_downloads(webview_module) -> None:
+    """Enable native save dialogs for attachment downloads in pywebview."""
+    webview_module.settings["ALLOW_DOWNLOADS"] = True
+
+
 def launch_desktop() -> None:
     """Start Flask, wait for readiness, then open the pywebview shell."""
     logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -91,6 +96,7 @@ def launch_desktop() -> None:
             "`pip install -r requirements-desktop.txt`."
         ) from exc
 
+    configure_webview_downloads(webview)
     webview.create_window(APP_TITLE, backend_url)
     webview.start()
 

@@ -33,6 +33,14 @@ class DesktopLauncherTests(unittest.TestCase):
 
         self.assertEqual(desktop.build_backend_url(54321), "http://127.0.0.1:54321")
 
+    def test_configure_webview_downloads_enables_native_save_dialogs(self):
+        desktop = importlib.import_module("desktop")
+        fake_webview = types.SimpleNamespace(settings={"ALLOW_DOWNLOADS": False})
+
+        desktop.configure_webview_downloads(fake_webview)
+
+        self.assertTrue(fake_webview.settings["ALLOW_DOWNLOADS"])
+
     def test_wait_for_backend_returns_when_health_is_ready(self):
         desktop = importlib.import_module("desktop")
 
@@ -53,6 +61,7 @@ class DesktopLauncherTests(unittest.TestCase):
     def test_launch_desktop_opens_pywebview_to_backend_url(self):
         desktop = importlib.import_module("desktop")
         fake_webview = types.SimpleNamespace(
+            settings={"ALLOW_DOWNLOADS": False},
             windows=[],
             started=False,
         )
@@ -77,4 +86,5 @@ class DesktopLauncherTests(unittest.TestCase):
 
         wait_for_backend.assert_called_once_with("http://127.0.0.1:43210")
         self.assertEqual(fake_webview.windows, [("ColorComic", "http://127.0.0.1:43210")])
+        self.assertTrue(fake_webview.settings["ALLOW_DOWNLOADS"])
         self.assertTrue(fake_webview.started)
