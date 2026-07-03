@@ -54,6 +54,23 @@ def _step_error_message(exc: Exception, fallback_step: str) -> str:
     return f"{fallback_step} failed: {exc}"
 
 
+def _runtime_output_pdf_path(job_id: str) -> str:
+    return os.path.join(Config.OUTPUT_FOLDER, job_id, "colorized.pdf")
+
+
+def _download_pdf_path(job_id: str) -> str | None:
+    job = jobs.get(job_id)
+    candidates = []
+    if job and job.output_pdf:
+        candidates.append(job.output_pdf)
+    candidates.append(_runtime_output_pdf_path(job_id))
+
+    for path in candidates:
+        if path and os.path.isfile(path):
+            return path
+    return None
+
+
 def _configure_torch_runtime():
     """Enable Torch runtime tuning without loading any model weights."""
     global _torch_runtime_configured
@@ -360,7 +377,7 @@ def create_app():
                 reassemble_pdf(colored_paths, output_pdf, job.pdf_path)
                 job.output_pdf = output_pdf
                 job.status = "done"
-                q.put({"done": True})
+                q.put({"done": True, "download_url": f"/api/download/{job_id}"})
             except Exception as e:
                 if job.mode == "reference":
                     logger.exception(
@@ -411,10 +428,10 @@ def create_app():
 
     @app.route("/api/download/<job_id>")
     def download_pdf(job_id):
-        job = jobs.get(job_id)
-        if not job or not job.output_pdf:
+        output_pdf = _download_pdf_path(job_id)
+        if not output_pdf:
             return "Not ready", 404
-        return send_file(job.output_pdf, as_attachment=True, download_name="colorized.pdf")
+        return send_file(output_pdf, as_attachment=True, download_name="colorized.pdf")
 
     @app.route("/api/health")
     def health():
