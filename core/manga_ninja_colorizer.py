@@ -25,10 +25,11 @@ class MangaNinjaColorizer:
         result_bgr = colorizer.colorize(bgr_image, reference_image=ref_bgr)
     """
 
-    def __init__(self, device: str = "auto", config=None):
+    def __init__(self, device: str = "auto", config=None, callback=None):
         self._lock = threading.Lock()
         self._device = self._resolve_device(device)
         self._config = config
+        self._callback = callback or print
         self._pipeline = None
         self.device_name = str(self._device)
         self.cuda_available = torch.cuda.is_available()
@@ -64,7 +65,7 @@ class MangaNinjaColorizer:
         device = self._device
         dtype = torch.float16 if device.type == "cuda" else torch.float32
 
-        print("[MangaNinja] Loading SD 1.5 components...")
+        self._emit("[MangaNinja] Loading SD 1.5 components...")
 
         # Scheduler
         scheduler = DDIMScheduler.from_pretrained(cfg.SD15_MODEL_PATH, subfolder="scheduler")
@@ -77,7 +78,7 @@ class MangaNinjaColorizer:
             cfg.SD15_MODEL_PATH, subfolder="unet",
             in_channels=4, low_cpu_mem_usage=False, ignore_mismatched_sizes=True,
         )
-        print("[MangaNinja] Loading denoising UNet weights...")
+        self._emit("[MangaNinja] Loading denoising UNet weights...")
         state = torch.load(cfg.MANGANINJA_DENOISING_UNET, map_location="cpu")
         denoising_unet.load_state_dict(state, strict=False)
         del state
@@ -87,7 +88,7 @@ class MangaNinjaColorizer:
             cfg.SD15_MODEL_PATH, subfolder="unet",
             in_channels=4, low_cpu_mem_usage=False, ignore_mismatched_sizes=True,
         )
-        print("[MangaNinja] Loading reference UNet weights...")
+        self._emit("[MangaNinja] Loading reference UNet weights...")
         state = torch.load(cfg.MANGANINJA_REFERENCE_UNET, map_location="cpu")
         reference_unet.load_state_dict(state, strict=False)
         del state
@@ -97,13 +98,13 @@ class MangaNinjaColorizer:
             cfg.CONTROLNET_LINEART_PATH,
             in_channels=4, low_cpu_mem_usage=False, ignore_mismatched_sizes=True,
         )
-        print("[MangaNinja] Loading ControlNet weights...")
+        self._emit("[MangaNinja] Loading ControlNet weights...")
         state = torch.load(cfg.MANGANINJA_CONTROLNET, map_location="cpu")
         controlnet.load_state_dict(state, strict=False)
         del state
 
         # CLIP
-        print("[MangaNinja] Loading CLIP...")
+        self._emit("[MangaNinja] Loading CLIP...")
         tokenizer = CLIPTokenizer.from_pretrained(cfg.CLIP_VISION_PATH)
         text_encoder = CLIPTextModel.from_pretrained(cfg.CLIP_VISION_PATH)
         image_encoder = CLIPVisionModelWithProjection.from_pretrained(cfg.CLIP_VISION_PATH)
@@ -136,7 +137,10 @@ class MangaNinjaColorizer:
         )
 
         self._pipeline = self._pipeline.to(device=device, dtype=dtype)
-        print(f"[MangaNinja] Pipeline loaded on {device}")
+        self._emit(f"[MangaNinja] Pipeline loaded on {device}")
+
+    def _emit(self, message: str) -> None:
+        self._callback(message)
 
     def colorize(self, image: np.ndarray, reference_image: np.ndarray = None,
                  size: int = 512) -> np.ndarray:

@@ -125,6 +125,13 @@
             return;
         }
 
+        if (data.status === 'model') {
+            if (data.step) {
+                document.getElementById('stepText').textContent = data.step;
+            }
+            return;
+        }
+
         const page = data.page;
         const total = data.total;
         const pct = Math.round(((page + 1) / total) * 100);

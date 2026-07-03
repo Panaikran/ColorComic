@@ -49,7 +49,7 @@ class ModelManager:
             return torch.device("cuda" if torch.cuda.is_available() else "cpu")
         return torch.device(self._device)
 
-    def get_colorizer(self, mode: str = "auto"):
+    def get_colorizer(self, mode: str = "auto", callback=None):
         """Return the colorizer for *mode*, loading it if necessary.
 
         If a different mode is currently loaded, it will be unloaded first
@@ -68,9 +68,9 @@ class ModelManager:
             self._unload()
 
             if mode == "auto":
-                self._colorizer = self._load_mcv2()
+                self._colorizer = self._load_mcv2(callback=callback)
             elif mode == "reference":
-                self._colorizer = self._load_manganinja()
+                self._colorizer = self._load_manganinja(callback=callback)
             else:
                 raise ValueError(f"Unknown colorization mode: {mode!r}")
 
@@ -109,11 +109,12 @@ class ModelManager:
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-    def _load_mcv2(self) -> MangaColorizer:
+    def _load_mcv2(self, callback=None) -> MangaColorizer:
         """Load the manga-colorization-v2 model."""
         from core.model_downloader import ensure_models_downloaded
 
-        ensure_models_downloaded(Config.WEIGHTS_DIR, callback=print)
+        progress = callback or print
+        ensure_models_downloaded(Config.WEIGHTS_DIR, callback=progress)
         colorizer = MangaColorizer(
             device=self._device,
             generator_path=Config.GENERATOR_WEIGHTS_PATH,
@@ -123,15 +124,17 @@ class ModelManager:
         print(f"[ModelManager] mc-v2 loaded on {colorizer.device_name}")
         return colorizer
 
-    def _load_manganinja(self):
+    def _load_manganinja(self, callback=None):
         """Load the MangaNinja reference-based colorizer."""
         from core.model_downloader import ensure_manganinja_downloaded
         from core.manga_ninja_colorizer import MangaNinjaColorizer
 
-        ensure_manganinja_downloaded(Config, callback=print)
+        progress = callback or print
+        ensure_manganinja_downloaded(Config, callback=progress)
         colorizer = MangaNinjaColorizer(
             device=self._device,
             config=Config,
+            callback=progress,
         )
         print(f"[ModelManager] MangaNinja loaded on {colorizer.device_name}")
         return colorizer

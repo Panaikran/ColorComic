@@ -54,6 +54,37 @@ def _step_error_message(exc: Exception, fallback_step: str) -> str:
     return f"{fallback_step} failed: {exc}"
 
 
+def _model_progress_message(mode: str, message: str) -> str:
+    normalized = message.replace("[MangaNinja]", "").strip()
+    lowered = normalized.lower()
+    if mode == "reference":
+        if "downloading manganinja" in lowered:
+            return "Downloading MangaNinja weights..."
+        if "loading sd 1.5" in lowered:
+            return "Loading SD 1.5 components..."
+        return "Loading Reference mode model..."
+    if "downloading" in lowered:
+        return "Downloading auto colorization model..."
+    if "extracting" in lowered:
+        return "Preparing auto colorization model..."
+    return "Loading auto colorization model..."
+
+
+def _model_progress_callback(job, event_queue: queue.Queue, mode: str):
+    last_step = {"value": None}
+
+    def callback(message: str) -> None:
+        print(message)
+        step = _model_progress_message(mode, message)
+        if step == last_step["value"]:
+            return
+        last_step["value"] = step
+        job.current_step = step
+        event_queue.put({"status": "model", "step": step})
+
+    return callback
+
+
 def _runtime_output_pdf_path(job_id: str) -> str:
     return os.path.join(Config.OUTPUT_FOLDER, job_id, "colorized.pdf")
 
@@ -342,8 +373,12 @@ def create_app():
 
                 current_step = "model load"
                 job.current_step = current_step
+                q.put({"status": "model", "step": _model_progress_message(job.mode, current_step)})
                 model_manager.switch_device(job.device)
-                colorizer = model_manager.get_colorizer(job.mode)
+                colorizer = model_manager.get_colorizer(
+                    job.mode,
+                    callback=_model_progress_callback(job, q, job.mode),
+                )
 
                 ref_image = None
                 if job.mode == "reference" and job.reference_image_path:
