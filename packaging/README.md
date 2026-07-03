@@ -25,7 +25,7 @@ python scripts\verify_dependency_imports.py
 Run the focused tests:
 
 ```powershell
-python -m unittest tests.test_desktop_launcher tests.test_app_startup tests.test_runtime_paths
+python -m unittest tests.test_desktop_launcher tests.test_app_startup tests.test_runtime_paths tests.test_icon_assets tests.test_model_progress
 ```
 
 ## Build
@@ -118,6 +118,17 @@ uninstall entry.
 
 The app, installer, and shortcuts use the shared icon asset at
 `static\img\colorcomic.ico`.
+
+For v0.1.1, also verify the desktop polish fixes before publishing:
+
+- Browser favicon and packaged app/shortcut icons use the shared icon.
+- The processing page shows first-run model download/loading messages.
+- Downloaded PDFs use `<original-name>-colorized.pdf` when the original PDF
+  name is available.
+- The desktop-only **Open Output Folder** button opens the runtime job output
+  directory.
+
+See `packaging\RELEASE_NOTES.md` for the v0.1.1 release summary.
 
 Uninstall preserves runtime data by default:
 

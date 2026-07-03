@@ -1,11 +1,14 @@
 # ColorComic Clean-Machine Validation
 
 This checklist validates the PyInstaller one-folder Windows CPU desktop build
-before adding an installer. Use it for `dist\ColorComic\ColorComic.exe`.
+and unsigned Inno Setup installer. Use it for `dist\ColorComic\ColorComic.exe`
+and the v0.1.1 installer output.
 
 ## Build Baseline
 
 - Expected output path: `dist\ColorComic\ColorComic.exe`
+- Expected installer path:
+  `packaging\inno\output\ColorComic-Setup-0.1.1-win64-cpu.exe`
 - Expected build type: PyInstaller one-folder, not one-file
 - Observed local output size: about 2.17 GB for the full `dist\ColorComic`
   folder
@@ -77,6 +80,10 @@ behavior, and permissions issues that a developer machine can hide.
 
 6. Confirm static/templates load:
    - Upload page renders with styles.
+   - Browser favicon loads without a 404.
+   - The desktop window, executable, installer, Start Menu shortcut, and
+     optional desktop shortcut use the ColorComic icon where Windows exposes
+     one.
    - Buttons, radio controls, upload area, and reference-mode notice are visible.
    - Browser/devtools console is not required; this is a visual check.
 
@@ -114,6 +121,9 @@ behavior, and permissions issues that a developer machine can hide.
     - Upload it in auto mode.
     - Confirm the app downloads auto-mode weights into
       `%LOCALAPPDATA%\ColorComic\models\weights`.
+    - Confirm the processing page shows visible messages such as
+      `Downloading auto colorization model...` and
+      `Loading auto colorization model...`.
     - Confirm the UI does not freeze permanently while the download/model load
       happens.
 
@@ -121,16 +131,28 @@ behavior, and permissions issues that a developer machine can hide.
     - Process a one-page PDF in auto mode.
     - Confirm the processing page receives progress updates.
     - Confirm preview image loads.
-    - Confirm `colorized.pdf` downloads.
+    - Confirm Download PDF works in the desktop window.
+    - Confirm the downloaded filename is source-aware, for example
+      `<original-name>-colorized.pdf`, when the uploaded PDF name is known.
+    - Confirm browser-mode download still works if testing with `python app.py`.
+    - Confirm the desktop-only **Open Output Folder** button opens
+      `%LOCALAPPDATA%\ColorComic\output\<job_id>` in Explorer.
     - Confirm output files are under `%LOCALAPPDATA%\ColorComic\output`.
 
-12. Failed network download handling:
+12. Reference-mode first-run progress:
+    - Upload a PDF with a colored reference page.
+    - Confirm the processing page shows visible messages such as
+      `Downloading MangaNinja weights...`, `Loading SD 1.5 components...`,
+      and `Loading Reference mode model...`.
+    - Confirm Reference mode can still finish after the first-run downloads.
+
+13. Failed network download handling:
     - Disconnect the network or block access to Google Drive/HuggingFace.
     - Start a colorization job that needs a missing model.
     - Expected: job enters an error state and the UI shows a useful failure
       instead of hanging indefinitely.
 
-13. App close releases process and port:
+14. App close releases process and port:
     - Close the ColorComic window.
     - Confirm `ColorComic.exe` exits.
     - Confirm the localhost listening port is released:
@@ -141,16 +163,16 @@ behavior, and permissions issues that a developer machine can hide.
         Where-Object { $_.OwningProcess -eq <old-process-id> }
       ```
 
-14. SmartScreen/Defender notes:
+15. SmartScreen/Defender notes:
     - Unsigned builds may show Microsoft Defender SmartScreen warnings.
     - Defender may scan or delay first launch because the folder is large and
       contains ML/runtime DLLs.
     - Record whether warnings are acceptable for internal testing. Code signing
       should be handled before wider distribution.
 
-## Blockers Before Installer Work
+## Blockers Before Release
 
-Do not start Inno Setup packaging if any of these fail:
+Do not publish the one-folder build or installer if any of these fail:
 
 - The exe does not launch on a clean Windows user/VM.
 - WebView2 is missing and the app does not report the issue clearly enough.
@@ -158,6 +180,13 @@ Do not start Inno Setup packaging if any of these fail:
 - Static/templates fail to load.
 - Runtime files are written beside the executable.
 - Model weights are bundled or downloaded at startup.
+- Browser favicon or Windows app/shortcut icons are missing or show stale
+  generic icons after a fresh install.
+- Download PDF fails in pywebview or browser mode.
+- Open Output Folder fails to open the runtime job output folder in desktop
+  mode.
+- Model download/loading progress is invisible during first-run auto or
+  reference model setup.
 - Closing the window leaves `ColorComic.exe` or the Flask port running.
 - A tiny one-page PDF cannot complete in auto mode after first-run model
   download.

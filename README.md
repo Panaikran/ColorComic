@@ -20,7 +20,9 @@ Automatically colorize black-and-white comic and manga pages using deep learning
 - **GPU detection** — analyze your hardware specs before choosing a device
 - **Cross-page color consistency** — LAB color transfer keeps character/environment colors consistent across pages (auto mode)
 - **Live preview** — side-by-side original vs. colorized comparison updates in real-time during processing
-- **PDF in, PDF out** — upload a B&W comic PDF, download a colorized PDF
+- **PDF in, PDF out** — upload a B&W comic PDF, download a colorized PDF with a source-aware filename
+- **Desktop output access** — desktop mode can open the completed job's output folder directly
+- **Visible first-run progress** — model downloads and model loading phases are shown on the processing page
 - **Zero cloud dependency** — everything runs locally, no API keys needed
 - **Auto model download** — weights are downloaded automatically on first use
 
@@ -165,6 +167,7 @@ python desktop.py
 
 Desktop mode starts the same Flask backend on an available `127.0.0.1` port and opens it with pywebview.
 The Windows desktop/package icon is shared from `static/img/colorcomic.ico`.
+In desktop mode, completed jobs include an **Open Output Folder** button that opens the job folder under `%LOCALAPPDATA%\ColorComic\output`.
 
 To verify the packaging-critical imports in a clean CPU desktop environment:
 
@@ -177,8 +180,8 @@ python scripts/verify_dependency_imports.py
 1. **Upload** — Drop a B&W comic/manga PDF onto the upload page
 2. **Choose mode** — Select "Auto" for automatic colorization or "Reference" for reference-based (upload a colored reference image)
 3. **Detect GPU** — Click "Detect GPU" to see your hardware specs and pick CPU or GPU
-4. **Colorize** — Hit "Upload & Colorize" and watch the progress with live previews
-5. **Download** — Get the colorized PDF or review individual pages
+4. **Colorize** — Hit "Upload & Colorize" and watch download, model-load, and per-page progress with live previews
+5. **Download** — Get the colorized PDF using a source-aware filename, open the output folder in desktop mode, or review individual pages
 
 ## Configuration
 
