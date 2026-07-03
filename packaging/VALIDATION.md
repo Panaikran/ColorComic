@@ -116,7 +116,22 @@ behavior, and permissions issues that a developer machine can hide.
      not files such as `generator.zip`, `net_rgb.pth`, or MangaNinja `.pth`
      files.
 
-10. First-run model download:
+10. Preflight error handling:
+    - Try a damaged or renamed non-PDF file with a `.pdf` extension.
+      Expected: processing stops before model download/load and the UI says to
+      choose a valid PDF.
+    - Try an empty PDF with no pages, if available.
+      Expected: the UI says to choose a PDF with at least one page.
+    - In Reference mode, start without a valid reference image or with a
+      corrupted image file.
+      Expected: processing stops before MangaNinja or SD 1.5 loading and the UI
+      says to choose a valid reference image.
+    - If output folder permissions can be restricted in the test account,
+      confirm the UI reports that ColorComic cannot write to the output folder.
+    - In all cases, confirm no model weights are downloaded as part of the
+      preflight failure.
+
+11. First-run model download:
     - Use a tiny one-page black-and-white PDF.
     - Upload it in auto mode.
     - Confirm the app downloads auto-mode weights into
@@ -127,7 +142,7 @@ behavior, and permissions issues that a developer machine can hide.
     - Confirm the UI does not freeze permanently while the download/model load
       happens.
 
-11. Tiny one-page PDF processing:
+12. Tiny one-page PDF processing:
     - Process a one-page PDF in auto mode.
     - Confirm the processing page receives progress updates.
     - Confirm preview image loads.
@@ -139,20 +154,20 @@ behavior, and permissions issues that a developer machine can hide.
       `%LOCALAPPDATA%\ColorComic\output\<job_id>` in Explorer.
     - Confirm output files are under `%LOCALAPPDATA%\ColorComic\output`.
 
-12. Reference-mode first-run progress:
+13. Reference-mode first-run progress:
     - Upload a PDF with a colored reference page.
     - Confirm the processing page shows visible messages such as
       `Downloading MangaNinja weights...`, `Loading SD 1.5 components...`,
       and `Loading Reference mode model...`.
     - Confirm Reference mode can still finish after the first-run downloads.
 
-13. Failed network download handling:
+14. Failed network download handling:
     - Disconnect the network or block access to Google Drive/HuggingFace.
     - Start a colorization job that needs a missing model.
     - Expected: job enters an error state and the UI shows a useful failure
       instead of hanging indefinitely.
 
-14. App close releases process and port:
+15. App close releases process and port:
     - Close the ColorComic window.
     - Confirm `ColorComic.exe` exits.
     - Confirm the localhost listening port is released:
@@ -163,7 +178,7 @@ behavior, and permissions issues that a developer machine can hide.
         Where-Object { $_.OwningProcess -eq <old-process-id> }
       ```
 
-15. SmartScreen/Defender notes:
+16. SmartScreen/Defender notes:
     - Unsigned builds may show Microsoft Defender SmartScreen warnings.
     - Defender may scan or delay first launch because the folder is large and
       contains ML/runtime DLLs.

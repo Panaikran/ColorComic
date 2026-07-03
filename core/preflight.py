@@ -72,11 +72,11 @@ def _check_output_dir(output_folder: str, job_id: str) -> tuple[str | None, list
     errors: list[PreflightError] = []
     try:
         output_dir = _resolve_output_job_dir(output_folder, job_id)
-    except (OSError, ValueError) as exc:
+    except (OSError, ValueError):
         return None, [
             PreflightError(
                 code="output_path_invalid",
-                message=str(exc),
+                message="ColorComic could not prepare the output folder. Restart the app and try again.",
                 step="output preflight",
             )
         ]
@@ -85,11 +85,14 @@ def _check_output_dir(output_folder: str, job_id: str) -> tuple[str | None, list
         os.makedirs(output_dir, exist_ok=True)
         with tempfile.NamedTemporaryFile(prefix=".preflight-", dir=output_dir, delete=True):
             pass
-    except OSError as exc:
+    except OSError:
         errors.append(
             PreflightError(
                 code="output_not_writable",
-                message=f"Output directory is not writable: {exc}",
+                message=(
+                    "ColorComic cannot write to the output folder. "
+                    "Check folder permissions or free space, then try again."
+                ),
                 step="output preflight",
             )
         )
@@ -113,7 +116,7 @@ def _check_reference_image(
         return [
             PreflightError(
                 code="reference_missing",
-                message="Reference mode requires a reference image",
+                message="Choose a reference image before starting Reference mode.",
                 step="reference preflight",
             )
         ]
@@ -122,7 +125,7 @@ def _check_reference_image(
         return [
             PreflightError(
                 code="reference_missing",
-                message="Reference image does not exist",
+                message="Choose the reference image again. ColorComic could not find it.",
                 step="reference preflight",
             )
         ]
@@ -131,7 +134,7 @@ def _check_reference_image(
         return [
             PreflightError(
                 code="reference_not_file",
-                message="Reference image path is not a file",
+                message="Choose an image file for Reference mode.",
                 step="reference preflight",
             )
         ]
@@ -139,11 +142,11 @@ def _check_reference_image(
     try:
         with open(reference_image_path, "rb") as handle:
             handle.read(1)
-    except OSError as exc:
+    except OSError:
         return [
             PreflightError(
                 code="reference_not_readable",
-                message=f"Reference image is not readable: {exc}",
+                message="Choose the reference image again. ColorComic could not read it.",
                 step="reference preflight",
             )
         ]
@@ -151,11 +154,11 @@ def _check_reference_image(
     try:
         reader = image_reader or _default_image_reader
         image = reader(reference_image_path)
-    except Exception as exc:
+    except Exception:
         return [
             PreflightError(
                 code="reference_unreadable",
-                message=f"Reference image could not be opened: {exc}",
+                message="Choose a valid PNG or JPEG reference image.",
                 step="reference preflight",
             )
         ]
@@ -164,7 +167,7 @@ def _check_reference_image(
         return [
             PreflightError(
                 code="reference_unreadable",
-                message="Reference image could not be decoded",
+                message="Choose a valid PNG or JPEG reference image.",
                 step="reference preflight",
             )
         ]
@@ -173,7 +176,7 @@ def _check_reference_image(
         return [
             PreflightError(
                 code="reference_invalid_dimensions",
-                message="Reference image has invalid dimensions",
+                message="Choose a reference image with visible width and height.",
                 step="reference preflight",
             )
         ]
@@ -198,7 +201,7 @@ def validate_colorize_preflight(
         errors.append(
             PreflightError(
                 code="pdf_missing",
-                message="Uploaded PDF does not exist",
+                message="Choose the PDF again. ColorComic could not find the uploaded file.",
                 step="PDF preflight",
             )
         )
@@ -206,7 +209,7 @@ def validate_colorize_preflight(
         errors.append(
             PreflightError(
                 code="pdf_not_file",
-                message="Uploaded PDF path is not a file",
+                message="Choose a PDF file, not a folder.",
                 step="PDF preflight",
             )
         )
@@ -214,11 +217,11 @@ def validate_colorize_preflight(
         try:
             with open(pdf_path, "rb") as handle:
                 handle.read(1)
-        except OSError as exc:
+        except OSError:
             errors.append(
                 PreflightError(
                     code="pdf_not_readable",
-                    message=f"Uploaded PDF is not readable: {exc}",
+                    message="Choose the PDF again. ColorComic could not read this file.",
                     step="PDF preflight",
                 )
             )
@@ -231,15 +234,15 @@ def validate_colorize_preflight(
                     errors.append(
                         PreflightError(
                             code="pdf_has_no_pages",
-                            message="Uploaded PDF must contain at least one page",
+                            message="Choose a PDF with at least one page.",
                             step="PDF preflight",
                         )
                     )
-            except Exception as exc:
+            except Exception:
                 errors.append(
                     PreflightError(
                         code="pdf_unreadable",
-                        message=f"Uploaded PDF could not be opened: {exc}",
+                        message="Choose a valid PDF. ColorComic could not open this file.",
                         step="PDF preflight",
                     )
                 )

@@ -110,7 +110,10 @@ class ColorizePreflightRouteTests(unittest.TestCase):
         self.assertEqual(app.jobs[job_id].status, "error")
         self.assertEqual(payload["done"], True)
         self.assertEqual(payload["step"], "PDF preflight")
-        self.assertIn("PDF preflight failed:", payload["error"])
+        self.assertEqual(
+            payload["error"],
+            "Choose the PDF again. ColorComic could not find the uploaded file.",
+        )
 
     def test_successful_preflight_still_schedules_colorization_thread(self):
         app = self.app_module
@@ -210,7 +213,7 @@ class ColorizePreflightRouteTests(unittest.TestCase):
                     errors=(
                         types.SimpleNamespace(
                             code="reference_missing",
-                            message="Reference image does not exist",
+                            message="Choose the reference image again. ColorComic could not find it.",
                             step="reference preflight",
                         ),
                     ),
@@ -234,7 +237,10 @@ class ColorizePreflightRouteTests(unittest.TestCase):
         self.assertEqual(app.jobs[job_id].status, "error")
         self.assertEqual(payload["done"], True)
         self.assertEqual(payload["step"], "reference preflight")
-        self.assertIn("reference preflight failed:", payload["error"])
+        self.assertEqual(
+            payload["error"],
+            "Choose the reference image again. ColorComic could not find it.",
+        )
 
 
 if __name__ == "__main__":

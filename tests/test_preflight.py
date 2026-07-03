@@ -40,9 +40,13 @@ class PreflightTests(unittest.TestCase):
                 page_count_reader=lambda path: 1,
             )
 
-            self.assertFalse(result.ok)
-            self.assertEqual(result.errors[0].code, "pdf_missing")
-            self.assertEqual(result.errors[0].step, "PDF preflight")
+        self.assertFalse(result.ok)
+        self.assertEqual(result.errors[0].code, "pdf_missing")
+        self.assertEqual(
+            result.errors[0].message,
+            "Choose the PDF again. ColorComic could not find the uploaded file.",
+        )
+        self.assertEqual(result.errors[0].step, "PDF preflight")
 
     def test_unopenable_pdf_returns_structured_error(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -58,9 +62,12 @@ class PreflightTests(unittest.TestCase):
                 page_count_reader=lambda path: (_ for _ in ()).throw(ValueError("bad pdf")),
             )
 
-            self.assertFalse(result.ok)
-            self.assertEqual(result.errors[0].code, "pdf_unreadable")
-            self.assertIn("bad pdf", result.errors[0].message)
+        self.assertFalse(result.ok)
+        self.assertEqual(result.errors[0].code, "pdf_unreadable")
+        self.assertEqual(
+            result.errors[0].message,
+            "Choose a valid PDF. ColorComic could not open this file.",
+        )
 
     def test_zero_page_pdf_returns_structured_error(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -75,8 +82,9 @@ class PreflightTests(unittest.TestCase):
                 page_count_reader=lambda path: 0,
             )
 
-            self.assertFalse(result.ok)
-            self.assertEqual(result.errors[0].code, "pdf_has_no_pages")
+        self.assertFalse(result.ok)
+        self.assertEqual(result.errors[0].code, "pdf_has_no_pages")
+        self.assertEqual(result.errors[0].message, "Choose a PDF with at least one page.")
 
     def test_output_job_dir_cannot_escape_output_folder(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -91,9 +99,13 @@ class PreflightTests(unittest.TestCase):
                 page_count_reader=lambda path: 1,
             )
 
-            self.assertFalse(result.ok)
-            self.assertIsNone(result.output_dir)
-            self.assertEqual(result.errors[0].code, "output_path_invalid")
+        self.assertFalse(result.ok)
+        self.assertIsNone(result.output_dir)
+        self.assertEqual(result.errors[0].code, "output_path_invalid")
+        self.assertEqual(
+            result.errors[0].message,
+            "ColorComic could not prepare the output folder. Restart the app and try again.",
+        )
 
     def test_result_can_be_serialized_for_future_sse_or_ui_use(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -124,9 +136,13 @@ class PreflightTests(unittest.TestCase):
                 mode="reference",
             )
 
-            self.assertFalse(result.ok)
-            self.assertEqual(result.errors[0].code, "reference_missing")
-            self.assertEqual(result.errors[0].step, "reference preflight")
+        self.assertFalse(result.ok)
+        self.assertEqual(result.errors[0].code, "reference_missing")
+        self.assertEqual(
+            result.errors[0].message,
+            "Choose a reference image before starting Reference mode.",
+        )
+        self.assertEqual(result.errors[0].step, "reference preflight")
 
     def test_reference_mode_rejects_undecodable_reference_image(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -147,8 +163,12 @@ class PreflightTests(unittest.TestCase):
                 image_reader=lambda path: None,
             )
 
-            self.assertFalse(result.ok)
-            self.assertEqual(result.errors[0].code, "reference_unreadable")
+        self.assertFalse(result.ok)
+        self.assertEqual(result.errors[0].code, "reference_unreadable")
+        self.assertEqual(
+            result.errors[0].message,
+            "Choose a valid PNG or JPEG reference image.",
+        )
 
     def test_reference_mode_rejects_invalid_reference_dimensions(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -169,8 +189,12 @@ class PreflightTests(unittest.TestCase):
                 image_reader=lambda path: FakeImage((0, 100, 3)),
             )
 
-            self.assertFalse(result.ok)
-            self.assertEqual(result.errors[0].code, "reference_invalid_dimensions")
+        self.assertFalse(result.ok)
+        self.assertEqual(result.errors[0].code, "reference_invalid_dimensions")
+        self.assertEqual(
+            result.errors[0].message,
+            "Choose a reference image with visible width and height.",
+        )
 
     def test_reference_mode_accepts_readable_reference_image(self):
         with tempfile.TemporaryDirectory() as temp_dir:

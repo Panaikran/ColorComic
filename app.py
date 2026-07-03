@@ -58,7 +58,7 @@ def _step_error_message(exc: Exception, fallback_step: str) -> str:
 def _preflight_error_message(errors) -> str:
     messages = [error.message for error in errors]
     if not messages:
-        return "Preflight failed"
+        return "ColorComic could not check the files before processing."
     return "; ".join(messages)
 
 
@@ -374,7 +374,7 @@ def create_app():
             job.status = "error"
             job.current_step = current_step
             q.put({
-                "error": f"{current_step} failed: {_preflight_error_message(preflight.errors)}",
+                "error": _preflight_error_message(preflight.errors),
                 "step": current_step,
                 "done": True,
             })
