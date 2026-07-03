@@ -1,6 +1,8 @@
 import importlib
+import os
 import socket
 import sys
+import tempfile
 import types
 import unittest
 from unittest import mock
@@ -41,6 +43,58 @@ class DesktopLauncherTests(unittest.TestCase):
 
         self.assertTrue(fake_webview.settings["ALLOW_DOWNLOADS"])
 
+    def test_resolve_output_folder_stays_inside_output_root(self):
+        desktop = importlib.import_module("desktop")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_root = os.path.join(temp_dir, "output")
+            expected = os.path.join(output_root, "abc-123")
+
+            self.assertEqual(
+                desktop.resolve_output_folder("abc-123", output_root=output_root),
+                os.path.abspath(expected),
+            )
+
+    def test_resolve_output_folder_rejects_path_escape(self):
+        desktop = importlib.import_module("desktop")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_root = os.path.join(temp_dir, "output")
+
+            with self.assertRaisesRegex(ValueError, "Invalid job id"):
+                desktop.resolve_output_folder("..\\outside", output_root=output_root)
+
+            with self.assertRaisesRegex(ValueError, "Invalid job id"):
+                desktop.resolve_output_folder("../outside", output_root=output_root)
+
+    def test_desktop_api_opens_existing_output_folder(self):
+        desktop = importlib.import_module("desktop")
+        opened = []
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_root = os.path.join(temp_dir, "output")
+            output_folder = os.path.join(output_root, "job-1")
+            os.makedirs(output_folder)
+            api = desktop.DesktopApi(output_root=output_root, opener=opened.append)
+
+            result = api.open_output_folder("job-1")
+
+        self.assertEqual(result["ok"], True)
+        self.assertEqual(opened, [os.path.abspath(output_folder)])
+
+    def test_desktop_api_reports_missing_output_folder(self):
+        desktop = importlib.import_module("desktop")
+        opened = []
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            api = desktop.DesktopApi(output_root=os.path.join(temp_dir, "output"), opener=opened.append)
+
+            result = api.open_output_folder("missing")
+
+        self.assertEqual(result["ok"], False)
+        self.assertIn("not found", result["error"])
+        self.assertEqual(opened, [])
+
     def test_wait_for_backend_returns_when_health_is_ready(self):
         desktop = importlib.import_module("desktop")
 
@@ -66,8 +120,8 @@ class DesktopLauncherTests(unittest.TestCase):
             started=False,
         )
 
-        def create_window(title, url):
-            fake_webview.windows.append((title, url))
+        def create_window(title, url, **kwargs):
+            fake_webview.windows.append((title, url, kwargs))
 
         def start():
             fake_webview.started = True
@@ -85,6 +139,7 @@ class DesktopLauncherTests(unittest.TestCase):
             desktop.launch_desktop()
 
         wait_for_backend.assert_called_once_with("http://127.0.0.1:43210")
-        self.assertEqual(fake_webview.windows, [("ColorComic", "http://127.0.0.1:43210")])
+        self.assertEqual(fake_webview.windows[0][0:2], ("ColorComic", "http://127.0.0.1:43210"))
+        self.assertIsInstance(fake_webview.windows[0][2]["js_api"], desktop.DesktopApi)
         self.assertTrue(fake_webview.settings["ALLOW_DOWNLOADS"])
         self.assertTrue(fake_webview.started)

@@ -46,8 +46,10 @@
             <p class="text-dim mt-1">Your comic has been colorized successfully.</p>
             <div class="flex mt-2" style="justify-content:center; gap:0.75rem;">
                 <a id="downloadPdfBtn" href="/api/download/{{ job.job_id }}" class="btn btn-primary">Download Colored PDF</a>
+                <button id="openOutputFolderBtn" class="btn btn-secondary" type="button" style="display:none;">Open Output Folder</button>
                 <a href="/preview/{{ job.job_id }}" class="btn btn-secondary">Review Pages</a>
             </div>
+            <p class="text-dim mt-1" id="openOutputFolderError" style="display:none;"></p>
         </div>
 
         <div id="processingError" style="display:none;">
@@ -64,8 +66,41 @@
 <script>
     const JOB_ID = "{{ job.job_id }}";
     const PAGE_COUNT = {{ job.page_count }};
+    const openOutputFolderBtn = document.getElementById('openOutputFolderBtn');
+    const openOutputFolderError = document.getElementById('openOutputFolderError');
 
     const evtSource = new EventSource(`/api/colorize/${JOB_ID}/stream`);
+
+    function configureDesktopOutputFolderButton() {
+        if (!window.pywebview || !window.pywebview.api || !window.pywebview.api.open_output_folder) {
+            return;
+        }
+        openOutputFolderBtn.style.display = '';
+    }
+
+    document.addEventListener('pywebviewready', configureDesktopOutputFolderButton);
+    configureDesktopOutputFolderButton();
+
+    openOutputFolderBtn.onclick = async function() {
+        openOutputFolderError.style.display = 'none';
+        openOutputFolderBtn.disabled = true;
+        try {
+            const result = await window.pywebview.api.open_output_folder(JOB_ID);
+            if (!result || !result.ok) {
+                openOutputFolderError.textContent = (result && result.error)
+                    ? result.error
+                    : 'Could not open the output folder.';
+                openOutputFolderError.style.display = 'block';
+            }
+        } catch (error) {
+            openOutputFolderError.textContent = error && error.message
+                ? error.message
+                : 'Could not open the output folder.';
+            openOutputFolderError.style.display = 'block';
+        } finally {
+            openOutputFolderBtn.disabled = false;
+        }
+    };
 
     evtSource.onmessage = function(event) {
         const data = JSON.parse(event.data);
