@@ -17,6 +17,7 @@ from datetime import datetime, timezone
 from config import Config
 from core.job_history import JobHistoryEntry, append_job_history, load_job_history
 from core.preflight import validate_colorize_preflight
+from core.preferences import load_preferences, save_preferences
 
 
 jobs = {}
@@ -78,6 +79,29 @@ def _model_progress_message(mode: str, message: str) -> str:
     if "extracting" in lowered:
         return "Preparing auto colorization model..."
     return "Loading auto colorization model..."
+
+
+def _validate_preferences_update(payload) -> tuple[dict | None, str | None]:
+    if not isinstance(payload, dict):
+        return None, "Preferences payload must be a JSON object."
+
+    updates = {}
+    if "default_mode" in payload:
+        if payload["default_mode"] not in ("auto", "reference"):
+            return None, "default_mode must be auto or reference."
+        updates["default_mode"] = payload["default_mode"]
+
+    if "default_device" in payload:
+        if payload["default_device"] != "cpu":
+            return None, "default_device must be cpu."
+        updates["default_device"] = payload["default_device"]
+
+    if "open_output_folder_after_completion" in payload:
+        if not isinstance(payload["open_output_folder_after_completion"], bool):
+            return None, "open_output_folder_after_completion must be true or false."
+        updates["open_output_folder_after_completion"] = payload["open_output_folder_after_completion"]
+
+    return updates, None
 
 
 def _model_progress_callback(job, event_queue: queue.Queue, mode: str):
@@ -603,6 +627,20 @@ def create_app():
             reverse=True,
         )
         return jsonify({"jobs": [_recent_job_payload(entry) for entry in entries]})
+
+    @app.route("/api/preferences", methods=["GET", "POST"])
+    def preferences():
+        if request.method == "GET":
+            return jsonify({"preferences": load_preferences()})
+
+        payload = request.get_json(silent=True)
+        updates, error = _validate_preferences_update(payload)
+        if error:
+            return jsonify({"error": error, "preferences": load_preferences()}), 400
+
+        preferences_payload = load_preferences()
+        preferences_payload.update(updates)
+        return jsonify({"preferences": save_preferences(preferences_payload)})
 
     @app.route("/api/health")
     def health():
