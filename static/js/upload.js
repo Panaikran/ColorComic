@@ -47,6 +47,9 @@ function selectFile(file) {
 
 const modeRadios = document.querySelectorAll('input[name="mode"]');
 const referenceSection = document.getElementById('referenceSection');
+const prefOpenOutputFolder = document.getElementById('prefOpenOutputFolder');
+const savePreferencesBtn = document.getElementById('savePreferencesBtn');
+const preferencesStatus = document.getElementById('preferencesStatus');
 
 function updateModeSection() {
     const isReference = getSelectedMode() === 'reference';
@@ -71,6 +74,9 @@ function applyModePreference(defaultMode) {
 
     preferredMode.checked = true;
     updateModeSection();
+
+    const preferredSetting = document.querySelector(`input[name="prefDefaultMode"][value="${defaultMode}"]`);
+    if (preferredSetting) preferredSetting.checked = true;
 }
 
 function applyDevicePreference(defaultDevice) {
@@ -80,6 +86,30 @@ function applyDevicePreference(defaultDevice) {
     if (cpuDevice) cpuDevice.checked = true;
 }
 
+function applyOutputFolderPreference(openOutputFolder) {
+    if (typeof openOutputFolder !== 'boolean' || !prefOpenOutputFolder) return;
+    prefOpenOutputFolder.checked = openOutputFolder;
+}
+
+function setPreferencesStatus(message, kind) {
+    if (!preferencesStatus) return;
+
+    preferencesStatus.textContent = message;
+    preferencesStatus.classList.remove('is-success', 'is-error');
+    if (kind) preferencesStatus.classList.add(`is-${kind}`);
+}
+
+function getSelectedPreferenceMode() {
+    const checked = document.querySelector('input[name="prefDefaultMode"]:checked');
+    return checked ? checked.value : 'auto';
+}
+
+function applyPreferences(preferences) {
+    applyModePreference(preferences.default_mode);
+    applyDevicePreference(preferences.default_device);
+    applyOutputFolderPreference(preferences.open_output_folder_after_completion);
+}
+
 async function loadPreferences() {
     try {
         const response = await fetch('/api/preferences');
@@ -87,11 +117,47 @@ async function loadPreferences() {
         const data = await response.json();
         const preferences = data && data.preferences ? data.preferences : {};
 
-        applyModePreference(preferences.default_mode);
-        applyDevicePreference(preferences.default_device);
+        applyPreferences(preferences);
     } catch (error) {
         // Keep the built-in form defaults when preferences are unavailable.
     }
+}
+
+async function savePreferences() {
+    if (!savePreferencesBtn) return;
+
+    setPreferencesStatus('Saving...', '');
+    savePreferencesBtn.disabled = true;
+    try {
+        const response = await fetch('/api/preferences', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                default_mode: getSelectedPreferenceMode(),
+                default_device: 'cpu',
+                open_output_folder_after_completion: Boolean(prefOpenOutputFolder && prefOpenOutputFolder.checked),
+            }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data && data.error ? data.error : 'Could not save preferences.');
+        }
+
+        const preferences = data && data.preferences ? data.preferences : {};
+        applyPreferences(preferences);
+        setPreferencesStatus('Preferences saved.', 'success');
+    } catch (error) {
+        setPreferencesStatus(
+            error && error.message ? error.message : 'Could not save preferences.',
+            'error',
+        );
+    } finally {
+        savePreferencesBtn.disabled = false;
+    }
+}
+
+if (savePreferencesBtn) {
+    savePreferencesBtn.addEventListener('click', savePreferences);
 }
 
 // ── Reference Image Upload ──────────────────────────────────────────────────
