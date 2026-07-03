@@ -1,0 +1,31 @@
+import os
+import unittest
+
+
+class RecentOutputsUiTests(unittest.TestCase):
+    def test_upload_page_contains_recent_outputs_section(self):
+        root = os.getcwd()
+        with open(os.path.join(root, "templates", "index.html"), encoding="utf-8") as handle:
+            template = handle.read()
+
+        self.assertIn('id="recentOutputsSection"', template)
+        self.assertIn('id="recentOutputsList"', template)
+        self.assertIn('id="recentOutputsEmpty"', template)
+        self.assertIn('id="recentOutputsError"', template)
+        self.assertIn("Recent Outputs", template)
+
+    def test_upload_script_loads_recent_jobs_and_supports_desktop_folder_action(self):
+        root = os.getcwd()
+        with open(os.path.join(root, "static", "js", "upload.js"), encoding="utf-8") as handle:
+            script = handle.read()
+
+        self.assertIn("fetch('/api/recent-jobs')", script)
+        self.assertIn("renderRecentOutput", script)
+        self.assertIn("output_pdf_exists", script)
+        self.assertIn("output_pdf_safe", script)
+        self.assertIn("window.pywebview.api.open_output_folder", script)
+        self.assertIn("/api/download/", script)
+
+
+if __name__ == "__main__":
+    unittest.main()

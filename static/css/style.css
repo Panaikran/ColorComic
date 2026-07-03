@@ -574,6 +574,62 @@ input:focus, select:focus, textarea:focus {
     font-size: 0.9rem;
 }
 
+.recent-outputs-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+}
+
+.recent-outputs-header h2 {
+    font-size: 1.1rem;
+    margin-bottom: 0.25rem;
+}
+
+.recent-outputs-list {
+    display: grid;
+    gap: 0.75rem;
+}
+
+.recent-output-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: center;
+    padding: 0.85rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+
+.recent-output-details {
+    min-width: 0;
+}
+
+.recent-output-details h3 {
+    font-size: 0.95rem;
+    margin-bottom: 0.25rem;
+    overflow-wrap: anywhere;
+}
+
+.recent-output-details p {
+    font-size: 0.8rem;
+    line-height: 1.4;
+}
+
+.recent-output-action-status {
+    margin-top: 0.35rem;
+}
+
+.recent-output-actions {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    flex-shrink: 0;
+}
+
 .spinner {
     display: inline-block;
     width: 18px;
@@ -598,4 +654,11 @@ input:focus, select:focus, textarea:focus {
         overflow-x: auto;
     }
     .thumb-strip .thumb { width: 80px; flex-shrink: 0; }
+    .recent-output-item {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+    .recent-output-actions {
+        justify-content: flex-start;
+    }
 }

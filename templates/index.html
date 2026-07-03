@@ -98,6 +98,23 @@
             </div>
         </div>
     </div>
+
+    <section class="card mt-3" id="recentOutputsSection" aria-labelledby="recentOutputsTitle">
+        <div class="recent-outputs-header">
+            <div>
+                <h2 id="recentOutputsTitle">Recent Outputs</h2>
+                <p class="text-dim">Completed jobs saved on this computer.</p>
+            </div>
+            <span class="text-dim" id="recentOutputsStatus">Loading...</span>
+        </div>
+        <div class="recent-outputs-list" id="recentOutputsList" style="display:none;"></div>
+        <p class="text-dim mt-1" id="recentOutputsEmpty" style="display:none;">
+            No completed outputs yet.
+        </p>
+        <p class="text-dim mt-1" id="recentOutputsError" style="display:none;">
+            Could not load recent outputs.
+        </p>
+    </section>
 </div>
 {% endblock %}
 

@@ -251,3 +251,158 @@ uploadBtn.addEventListener('click', async () => {
         uploadBtn.disabled = false;
     }
 });
+
+// Recent outputs
+
+const recentOutputsStatus = document.getElementById('recentOutputsStatus');
+const recentOutputsList = document.getElementById('recentOutputsList');
+const recentOutputsEmpty = document.getElementById('recentOutputsEmpty');
+const recentOutputsError = document.getElementById('recentOutputsError');
+
+function canOpenOutputFolder() {
+    return Boolean(
+        window.pywebview
+        && window.pywebview.api
+        && window.pywebview.api.open_output_folder
+    );
+}
+
+function formatMode(mode) {
+    if (mode === 'reference') return 'Reference';
+    return 'Auto';
+}
+
+function formatCompletedAt(value) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value || 'Unknown time';
+    return date.toLocaleString([], {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+    });
+}
+
+function buildRecentOutputMeta(job) {
+    const parts = [
+        formatMode(job.mode),
+        formatCompletedAt(job.completed_at),
+    ];
+    if (Number.isInteger(job.page_count)) {
+        parts.push(`${job.page_count} page${job.page_count === 1 ? '' : 's'}`);
+    }
+    if (!job.output_pdf_safe) {
+        parts.push('Output path unavailable');
+    } else if (!job.output_pdf_exists) {
+        parts.push('Output file missing');
+    }
+    return parts.join(' - ');
+}
+
+async function openRecentOutputFolder(jobId, statusElement, button) {
+    statusElement.textContent = '';
+    button.disabled = true;
+    try {
+        const result = await window.pywebview.api.open_output_folder(jobId);
+        if (!result || !result.ok) {
+            statusElement.textContent = result && result.error
+                ? result.error
+                : 'Could not open the output folder.';
+        }
+    } catch (error) {
+        statusElement.textContent = error && error.message
+            ? error.message
+            : 'Could not open the output folder.';
+    } finally {
+        button.disabled = false;
+    }
+}
+
+function renderRecentOutput(job) {
+    const item = document.createElement('article');
+    item.className = 'recent-output-item';
+
+    const details = document.createElement('div');
+    details.className = 'recent-output-details';
+
+    const title = document.createElement('h3');
+    title.textContent = job.original_filename || 'Untitled PDF';
+    details.appendChild(title);
+
+    const meta = document.createElement('p');
+    meta.className = 'text-dim';
+    meta.textContent = buildRecentOutputMeta(job);
+    details.appendChild(meta);
+
+    const actionStatus = document.createElement('p');
+    actionStatus.className = 'text-dim recent-output-action-status';
+    details.appendChild(actionStatus);
+
+    item.appendChild(details);
+
+    const actions = document.createElement('div');
+    actions.className = 'recent-output-actions';
+
+    if (job.output_pdf_exists && job.output_pdf_safe) {
+        const download = document.createElement('a');
+        download.className = 'btn btn-primary btn-sm';
+        download.href = `/api/download/${encodeURIComponent(job.job_id)}`;
+        download.textContent = 'Download';
+        actions.appendChild(download);
+
+        if (canOpenOutputFolder()) {
+            const openFolder = document.createElement('button');
+            openFolder.className = 'btn btn-secondary btn-sm';
+            openFolder.type = 'button';
+            openFolder.textContent = 'Open Folder';
+            openFolder.addEventListener('click', () => {
+                openRecentOutputFolder(job.job_id, actionStatus, openFolder);
+            });
+            actions.appendChild(openFolder);
+        }
+    } else {
+        const unavailable = document.createElement('span');
+        unavailable.className = 'status status-error';
+        unavailable.textContent = 'Unavailable';
+        actions.appendChild(unavailable);
+    }
+
+    item.appendChild(actions);
+    return item;
+}
+
+async function loadRecentOutputs() {
+    if (!recentOutputsList) return;
+
+    recentOutputsStatus.textContent = 'Loading...';
+    recentOutputsList.style.display = 'none';
+    recentOutputsEmpty.style.display = 'none';
+    recentOutputsError.style.display = 'none';
+
+    try {
+        const response = await fetch('/api/recent-jobs');
+        if (!response.ok) throw new Error('Recent outputs request failed');
+        const data = await response.json();
+        const jobs = Array.isArray(data.jobs) ? data.jobs : [];
+
+        recentOutputsList.replaceChildren();
+        if (!jobs.length) {
+            recentOutputsStatus.textContent = '';
+            recentOutputsEmpty.style.display = 'block';
+            return;
+        }
+
+        jobs.forEach(job => {
+            recentOutputsList.appendChild(renderRecentOutput(job));
+        });
+        recentOutputsStatus.textContent = `${jobs.length} saved`;
+        recentOutputsList.style.display = 'grid';
+    } catch (error) {
+        recentOutputsStatus.textContent = '';
+        recentOutputsError.style.display = 'block';
+    }
+}
+
+document.addEventListener('pywebviewready', loadRecentOutputs);
+loadRecentOutputs();
