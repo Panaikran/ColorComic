@@ -12,8 +12,10 @@ import os
 import queue
 import threading
 import uuid
+from datetime import datetime, timezone
 
 from config import Config
+from core.job_history import JobHistoryEntry, append_job_history
 from core.preflight import validate_colorize_preflight
 
 
@@ -144,6 +146,35 @@ def _download_pdf_name(job_id: str) -> str:
         if safe_stem:
             return f"{safe_stem}-colorized.pdf"
     return "colorized.pdf"
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _record_completed_job_history(job, output_pdf: str, history_path: str | None = None) -> bool:
+    if not output_pdf or not os.path.isfile(output_pdf):
+        return False
+
+    original_filename = os.path.basename(getattr(job, "pdf_path", "")) or "colorized.pdf"
+    page_count = getattr(job, "page_count", None)
+    if not isinstance(page_count, int):
+        page_count = None
+
+    entry = JobHistoryEntry(
+        job_id=job.job_id,
+        original_filename=original_filename,
+        mode=getattr(job, "mode", "auto") or "auto",
+        completed_at=_utc_now_iso(),
+        output_pdf_path=output_pdf,
+        page_count=page_count,
+    )
+    try:
+        append_job_history(entry, path=history_path)
+    except Exception:
+        logger.exception("Failed to write job history for job %s", job.job_id)
+        return False
+    return True
 
 
 def _configure_torch_runtime():
@@ -476,6 +507,7 @@ def create_app():
                 output_pdf = os.path.join(out_dir, "colorized.pdf")
                 reassemble_pdf(colored_paths, output_pdf, job.pdf_path)
                 job.output_pdf = output_pdf
+                _record_completed_job_history(job, output_pdf)
                 job.status = "done"
                 q.put({"done": True, "download_url": f"/api/download/{job_id}"})
             except Exception as e:
