@@ -87,6 +87,40 @@
             </div>
         </div>
 
+        <section class="preferences-panel mt-2" id="preferencesSection" aria-labelledby="preferencesTitle">
+            <div class="preferences-header">
+                <div>
+                    <h3 id="preferencesTitle">Preferences</h3>
+                    <p class="text-dim">Defaults saved on this computer.</p>
+                </div>
+                <button type="button" class="btn btn-secondary btn-sm" id="savePreferencesBtn">
+                    Save
+                </button>
+            </div>
+
+            <div class="form-group">
+                <label>Default Colorization Mode</label>
+                <div class="radio-group">
+                    <label>
+                        <input type="radio" name="prefDefaultMode" value="auto" checked>
+                        Auto
+                    </label>
+                    <label>
+                        <input type="radio" name="prefDefaultMode" value="reference">
+                        Reference
+                    </label>
+                </div>
+            </div>
+
+            <label class="checkbox-row">
+                <input type="checkbox" id="prefOpenOutputFolder">
+                Open output folder after completion
+            </label>
+
+            <p class="text-dim preferences-device">Device: CPU only</p>
+            <p class="text-dim preferences-status" id="preferencesStatus" aria-live="polite"></p>
+        </section>
+
         <button class="btn btn-primary mt-2" id="uploadBtn" style="width:100%;" disabled>
             Upload &amp; Colorize
         </button>

@@ -236,6 +236,50 @@ input:focus, select:focus, textarea:focus {
     cursor: pointer;
 }
 
+.checkbox-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    font-size: 0.9rem;
+    color: var(--text);
+    cursor: pointer;
+}
+
+.preferences-panel {
+    padding: 1rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+
+.preferences-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+}
+
+.preferences-header h3 {
+    font-size: 1rem;
+    margin-bottom: 0.2rem;
+}
+
+.preferences-device,
+.preferences-status {
+    font-size: 0.8rem;
+    line-height: 1.4;
+}
+
+.preferences-status {
+    min-height: 1.2em;
+    margin-top: 0.5rem;
+}
+
+.preferences-status.is-success { color: var(--success); }
+.preferences-status.is-error { color: var(--danger); }
+
 /* ── Progress Bar ─────────────────────────────────────────────────── */
 
 .progress-bar {
