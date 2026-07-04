@@ -129,6 +129,41 @@ Or use the wrapper:
 .\packaging\build_installer.ps1
 ```
 
+The wrapper discovers `ISCC.exe` automatically. Lookup order:
+
+1. Explicit `-InnoCompiler` argument
+2. `ISCC.exe` on `PATH`
+3. `%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe`
+4. `C:\Program Files\Inno Setup 6\ISCC.exe`
+5. `C:\Program Files (x86)\Inno Setup 6\ISCC.exe`
+
+Example with an explicit compiler path:
+
+```powershell
+.\packaging\build_installer.ps1 -InnoCompiler "C:\Program Files\Inno Setup 6\ISCC.exe"
+```
+
+If `ISCC.exe` cannot be found, the wrapper prints every checked location and
+suggests installing Inno Setup 6, adding `ISCC.exe` to `PATH`, or passing
+`-InnoCompiler`.
+
+Before invoking Inno Setup, the wrapper verifies:
+
+- `packaging\inno\ColorComic.iss` exists
+- `dist\ColorComic\ColorComic.exe` exists
+- `dist\ColorComic` looks like a PyInstaller one-folder build, including the
+  `_internal` support directory
+
+If preflight fails, run:
+
+```powershell
+.\packaging\build_windows.ps1
+```
+
+After Inno Setup completes successfully, the wrapper validates that the expected
+installer file exists and is not empty, then prints the installer filename, full
+path, and size in MB.
+
 Expected installer output:
 
 ```text

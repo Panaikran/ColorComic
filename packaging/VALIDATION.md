@@ -46,6 +46,34 @@ Get-ChildItem .\dist\ColorComic -Force |
 
 Expected: no results.
 
+## Installer Build Workflow
+
+Run the installer wrapper after the PyInstaller one-folder build exists:
+
+```powershell
+.\packaging\build_installer.ps1
+```
+
+Expected behavior:
+
+- The wrapper finds `ISCC.exe` through the explicit `-InnoCompiler` argument,
+  `PATH`, or one of the common Inno Setup 6 install locations.
+- If `ISCC.exe` is missing, the error lists every checked location and gives
+  recovery guidance.
+- Before invoking Inno Setup, the wrapper confirms
+  `packaging\inno\ColorComic.iss`, `dist\ColorComic\ColorComic.exe`, and the
+  PyInstaller one-folder support directory exist.
+- If preflight fails, the error suggests running
+  `.\packaging\build_windows.ps1` first.
+- After Inno Setup completes, the wrapper confirms the installer exists, is not
+  empty, and prints the filename, full path, and size in MB.
+
+Expected installer output:
+
+```text
+packaging\inno\output\ColorComic-Setup-0.2.0-win64-cpu.exe
+```
+
 ## Clean Windows VM Or Different User
 
 Validate on a clean Windows VM or at least a different Windows user account.
