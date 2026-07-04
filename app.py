@@ -283,6 +283,127 @@ def get_post_processor():
     return _post_processor
 
 
+def _run_colorization_job(job_id: str, job, event_queue: queue.Queue, out_dir: str) -> bool:
+    current_step = "startup"
+    try:
+        import cv2
+        import torch
+
+        from core.color_consistency import ColorConsistencyManager
+        from core.pdf_handler import reassemble_pdf
+
+        current_step = "runtime initialization"
+        job.current_step = current_step
+        model_manager = get_model_manager()
+        post_processor = get_post_processor()
+
+        current_step = "model load"
+        job.current_step = current_step
+        event_queue.put({"status": "model", "step": _model_progress_message(job.mode, current_step)})
+        model_manager.switch_device(job.device)
+        colorizer = model_manager.get_colorizer(
+            job.mode,
+            callback=_model_progress_callback(job, event_queue, job.mode),
+        )
+
+        ref_image = None
+        if job.mode == "reference" and job.reference_image_path:
+            current_step = "reference preprocessing"
+            job.current_step = current_step
+            ref_image = _read_image_or_raise(
+                job.reference_image_path,
+                current_step,
+                "reference",
+                cv2_module=cv2,
+            )
+
+        consistency = ColorConsistencyManager()
+        colored_paths = []
+
+        with torch.inference_mode():
+            for i, img_path in enumerate(job.page_images):
+                current_step = f"page {i + 1} image loading"
+                job.current_step = current_step
+                event_queue.put({
+                    "page": i,
+                    "total": job.page_count,
+                    "status": "colorizing",
+                    "step": current_step,
+                })
+
+                image = _read_image_or_raise(
+                    img_path,
+                    current_step,
+                    f"page {i + 1}",
+                    cv2_module=cv2,
+                )
+                current_step = f"page {i + 1} colorization"
+                job.current_step = current_step
+                if job.mode == "reference":
+                    result = colorizer.colorize(image, reference_image=ref_image)
+                else:
+                    result = colorizer.colorize(image)
+
+                current_step = f"page {i + 1} post-processing"
+                job.current_step = current_step
+                result = post_processor.process(result, image)
+
+                if job.mode == "auto":
+                    current_step = f"page {i + 1} color consistency"
+                    job.current_step = current_step
+                    if i == 0:
+                        consistency.set_reference(result)
+                    else:
+                        result = consistency.apply(
+                            result,
+                            strength=Config.COLOR_TRANSFER_STRENGTH,
+                        )
+
+                out_path = os.path.join(out_dir, f"colored_{i:04d}.jpg")
+                cv2.imwrite(out_path, result, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                colored_paths.append(out_path)
+                job.colorized_images.append(out_path)
+
+                job.progress = (i + 1) / job.page_count
+                event_queue.put({
+                    "page": i,
+                    "total": job.page_count,
+                    "status": "done_page",
+                    "step": current_step,
+                })
+
+        current_step = "PDF export"
+        job.current_step = current_step
+        output_pdf = os.path.join(out_dir, "colorized.pdf")
+        reassemble_pdf(colored_paths, output_pdf, job.pdf_path)
+        job.output_pdf = output_pdf
+        _record_completed_job_history(job, output_pdf)
+        job.status = "done"
+        event_queue.put({"done": True, "download_url": f"/api/download/{job_id}"})
+        return True
+    except Exception as e:
+        if job.mode == "reference":
+            logger.exception(
+                "Reference mode colorization failed for job %s during %s",
+                job_id,
+                current_step,
+            )
+        else:
+            logger.exception(
+                "Colorization failed for job %s during %s",
+                job_id,
+                current_step,
+            )
+        job.status = "error"
+        job.current_step = current_step
+        event_queue.put({
+            "error": _step_error_message(e, current_step),
+            "step": current_step,
+            "done": True,
+        })
+        return False
+
+
 def _probe_device_summary():
     """Return best-effort device info without touching model weights."""
     try:
@@ -467,122 +588,8 @@ def create_app():
         out_dir = preflight.output_dir
 
         def _run():
-            current_step = "startup"
             try:
-                import cv2
-                import torch
-
-                from core.color_consistency import ColorConsistencyManager
-                from core.pdf_handler import reassemble_pdf
-
-                current_step = "runtime initialization"
-                job.current_step = current_step
-                model_manager = get_model_manager()
-                post_processor = get_post_processor()
-
-                current_step = "model load"
-                job.current_step = current_step
-                q.put({"status": "model", "step": _model_progress_message(job.mode, current_step)})
-                model_manager.switch_device(job.device)
-                colorizer = model_manager.get_colorizer(
-                    job.mode,
-                    callback=_model_progress_callback(job, q, job.mode),
-                )
-
-                ref_image = None
-                if job.mode == "reference" and job.reference_image_path:
-                    current_step = "reference preprocessing"
-                    job.current_step = current_step
-                    ref_image = _read_image_or_raise(
-                        job.reference_image_path,
-                        current_step,
-                        "reference",
-                        cv2_module=cv2,
-                    )
-
-                consistency = ColorConsistencyManager()
-                colored_paths = []
-
-                with torch.inference_mode():
-                    for i, img_path in enumerate(job.page_images):
-                        current_step = f"page {i + 1} image loading"
-                        job.current_step = current_step
-                        q.put({
-                            "page": i,
-                            "total": job.page_count,
-                            "status": "colorizing",
-                            "step": current_step,
-                        })
-
-                        image = _read_image_or_raise(
-                            img_path,
-                            current_step,
-                            f"page {i + 1}",
-                            cv2_module=cv2,
-                        )
-                        current_step = f"page {i + 1} colorization"
-                        job.current_step = current_step
-                        if job.mode == "reference":
-                            result = colorizer.colorize(image, reference_image=ref_image)
-                        else:
-                            result = colorizer.colorize(image)
-
-                        current_step = f"page {i + 1} post-processing"
-                        job.current_step = current_step
-                        result = post_processor.process(result, image)
-
-                        if job.mode == "auto":
-                            current_step = f"page {i + 1} color consistency"
-                            job.current_step = current_step
-                            if i == 0:
-                                consistency.set_reference(result)
-                            else:
-                                result = consistency.apply(
-                                    result,
-                                    strength=Config.COLOR_TRANSFER_STRENGTH,
-                                )
-
-                        out_path = os.path.join(out_dir, f"colored_{i:04d}.jpg")
-                        cv2.imwrite(out_path, result, [cv2.IMWRITE_JPEG_QUALITY, 85])
-                        colored_paths.append(out_path)
-                        job.colorized_images.append(out_path)
-
-                        job.progress = (i + 1) / job.page_count
-                        q.put({
-                            "page": i,
-                            "total": job.page_count,
-                            "status": "done_page",
-                            "step": current_step,
-                        })
-
-                current_step = "PDF export"
-                job.current_step = current_step
-                output_pdf = os.path.join(out_dir, "colorized.pdf")
-                reassemble_pdf(colored_paths, output_pdf, job.pdf_path)
-                job.output_pdf = output_pdf
-                _record_completed_job_history(job, output_pdf)
-                job.status = "done"
-                q.put({"done": True, "download_url": f"/api/download/{job_id}"})
-            except Exception as e:
-                if job.mode == "reference":
-                    logger.exception(
-                        "Reference mode colorization failed for job %s during %s",
-                        job_id,
-                        current_step,
-                    )
-                else:
-                    logger.exception(
-                        "Colorization failed for job %s during %s",
-                        job_id,
-                        current_step,
-                    )
-                job.status = "error"
-                job.current_step = current_step
-                q.put({
-                    "error": _step_error_message(e, current_step),
-                    "step": current_step,
-                    "done": True,
-                })
+                _run_colorization_job(job_id, job, q, out_dir)
             finally:
                 job_queues.pop(job_id, None)
 

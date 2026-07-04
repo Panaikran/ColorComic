@@ -120,7 +120,9 @@ class ColorizePreflightRouteTests(unittest.TestCase):
         original_thread = app.threading.Thread
         original_output_folder = app.Config.OUTPUT_FOLDER
         original_preflight = app.validate_colorize_preflight
+        original_worker = app._run_colorization_job
         FakeThread.instances = []
+        worker_call = {}
 
         with tempfile.TemporaryDirectory() as temp_dir:
             pdf_path = os.path.join(temp_dir, "input.pdf")
@@ -129,6 +131,7 @@ class ColorizePreflightRouteTests(unittest.TestCase):
 
             app.Config.OUTPUT_FOLDER = os.path.join(temp_dir, "output")
             job_id = "preflight-pass"
+            expected_out_dir = os.path.join(app.Config.OUTPUT_FOLDER, job_id)
             app.jobs[job_id] = types.SimpleNamespace(
                 job_id=job_id,
                 pdf_path=pdf_path,
@@ -153,17 +156,34 @@ class ColorizePreflightRouteTests(unittest.TestCase):
                 )
             )
 
+            def fake_worker(called_job_id, called_job, event_queue, out_dir):
+                worker_call["job_id"] = called_job_id
+                worker_call["job"] = called_job
+                worker_call["event_queue"] = event_queue
+                worker_call["out_dir"] = out_dir
+                return True
+
+            app._run_colorization_job = fake_worker
+
             try:
                 response = self.flask_app.routes["/api/colorize/<job_id>"](job_id)
+                scheduled_queue = app.job_queues[job_id]
+                FakeThread.instances[0].target()
             finally:
                 app.threading.Thread = original_thread
                 app.Config.OUTPUT_FOLDER = original_output_folder
                 app.validate_colorize_preflight = original_preflight
+                app._run_colorization_job = original_worker
 
         self.assertEqual(response, {"ok": True})
         self.assertEqual(app.jobs[job_id].status, "colorizing")
         self.assertTrue(FakeThread.instances)
         self.assertTrue(FakeThread.instances[0].started)
+        self.assertEqual(worker_call["job_id"], job_id)
+        self.assertIs(worker_call["job"], app.jobs[job_id])
+        self.assertIs(worker_call["event_queue"], scheduled_queue)
+        self.assertEqual(worker_call["out_dir"], expected_out_dir)
+        self.assertNotIn(job_id, app.job_queues)
 
     def test_reference_preflight_failure_stops_before_model_load(self):
         app = self.app_module
