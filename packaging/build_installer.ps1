@@ -5,7 +5,8 @@ param(
 $ErrorActionPreference = "Stop"
 
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
-$DistExe = Join-Path $RepoRoot "dist\ColorComic\ColorComic.exe"
+$DistDir = Join-Path $RepoRoot "dist\ColorComic"
+$DistExe = Join-Path $DistDir "ColorComic.exe"
 $ScriptPath = Join-Path $RepoRoot "packaging\inno\ColorComic.iss"
 $CheckedInnoLocations = New-Object System.Collections.Generic.List[string]
 $InnoCandidates = New-Object System.Collections.Generic.List[object]
@@ -26,6 +27,22 @@ function Add-InnoCandidate {
         Source = $Source
         Path = $Path
     })
+}
+
+function Format-InstallerPreflightFailedMessage {
+    param(
+        [System.Collections.Generic.List[string]]$Failures
+    )
+
+    $details = ($Failures | ForEach-Object { "  - $_" }) -join [Environment]::NewLine
+    return @"
+Installer build preflight failed.
+
+$details
+
+Build the PyInstaller one-folder output first:
+  .\packaging\build_windows.ps1
+"@
 }
 
 function Format-InnoCompilerNotFoundMessage {
@@ -53,9 +70,32 @@ function Join-OptionalPath {
     return Join-Path $BasePath $ChildPath
 }
 
-if (-not (Test-Path -LiteralPath $DistExe)) {
-    throw "Missing PyInstaller output: $DistExe. Build it first with packaging\build_windows.ps1."
+function Assert-InstallerBuildInputs {
+    $failures = New-Object System.Collections.Generic.List[string]
+    $internalDir = Join-Path $DistDir "_internal"
+
+    if (-not (Test-Path -LiteralPath $ScriptPath -PathType Leaf)) {
+        $failures.Add("Missing Inno Setup script: $ScriptPath")
+    }
+
+    if (-not (Test-Path -LiteralPath $DistDir -PathType Container)) {
+        $failures.Add("Missing PyInstaller one-folder output directory: $DistDir")
+    }
+
+    if (-not (Test-Path -LiteralPath $DistExe -PathType Leaf)) {
+        $failures.Add("Missing PyInstaller executable: $DistExe")
+    }
+
+    if ((Test-Path -LiteralPath $DistDir -PathType Container) -and -not (Test-Path -LiteralPath $internalDir -PathType Container)) {
+        $failures.Add("PyInstaller one-folder support directory not found: $internalDir")
+    }
+
+    if ($failures.Count -gt 0) {
+        throw (Format-InstallerPreflightFailedMessage $failures)
+    }
 }
+
+Assert-InstallerBuildInputs
 
 if ($InnoCompiler) {
     Add-InnoCandidate "Explicit -InnoCompiler" $InnoCompiler

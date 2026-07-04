@@ -38,6 +38,28 @@ class BuildInstallerScriptTests(unittest.TestCase):
         self.assertIn("Resolve-Path -LiteralPath $candidate.Path", script)
         self.assertIn("& $ResolvedInnoCompiler $ScriptPath", script)
 
+    def test_installer_preflight_checks_required_build_inputs(self):
+        script = self.read_script()
+
+        self.assertIn('$DistDir = Join-Path $RepoRoot "dist\\ColorComic"', script)
+        self.assertIn('$DistExe = Join-Path $DistDir "ColorComic.exe"', script)
+        self.assertIn('$ScriptPath = Join-Path $RepoRoot "packaging\\inno\\ColorComic.iss"', script)
+        self.assertIn("function Assert-InstallerBuildInputs", script)
+        self.assertIn("Test-Path -LiteralPath $ScriptPath -PathType Leaf", script)
+        self.assertIn("Test-Path -LiteralPath $DistDir -PathType Container", script)
+        self.assertIn("Test-Path -LiteralPath $DistExe -PathType Leaf", script)
+        self.assertIn('Join-Path $DistDir "_internal"', script)
+        self.assertIn("PyInstaller one-folder support directory not found", script)
+
+    def test_installer_preflight_guidance_runs_before_inno_invocation(self):
+        script = self.read_script()
+
+        self.assertIn("Installer build preflight failed.", script)
+        self.assertIn(".\\packaging\\build_windows.ps1", script)
+        preflight_call = script.rindex("Assert-InstallerBuildInputs")
+        self.assertLess(preflight_call, script.index("Get-Command ISCC.exe"))
+        self.assertLess(preflight_call, script.index("& $ResolvedInnoCompiler $ScriptPath"))
+
     def test_slice_does_not_bump_installer_version(self):
         script = self.read_script()
 
