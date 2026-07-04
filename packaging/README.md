@@ -77,7 +77,7 @@ Bundled read-only resources:
 - `THIRD_PARTY_NOTICES.md` or `NOTICE`, if present
 
 The PyInstaller spec also collects project Python modules, including the
-v0.2.0 runtime helpers under `core\preflight.py`, `core\job_history.py`, and
+runtime helpers under `core\preflight.py`, `core\job_history.py`, and
 `core\preferences.py`.
 
 Not bundled:
@@ -167,7 +167,7 @@ path, and size in MB.
 Expected installer output:
 
 ```text
-packaging\inno\output\ColorComic-Setup-0.2.0-win64-cpu.exe
+packaging\inno\output\ColorComic-Setup-0.2.1-win64-cpu.exe
 ```
 
 The installer copies `dist\ColorComic` into Program Files, creates a Start Menu
@@ -177,7 +177,16 @@ uninstall entry.
 The app, installer, and shortcuts use the shared icon asset at
 `static\img\colorcomic.ico`.
 
-For v0.2.0, also verify the local workflow hardening before publishing:
+For v0.2.1, also verify the installer workflow hardening before publishing:
+
+- `build_installer.ps1` discovers `ISCC.exe` through the documented lookup
+  order or reports every checked location.
+- Installer preflight fails clearly if the Inno script or PyInstaller
+  one-folder output is missing.
+- Successful installer builds print the installer filename, full path, and size
+  in MB.
+
+Continue to verify the v0.2.0 local workflow hardening:
 
 - Preflight errors stop before model download/load.
 - Recent Outputs lists completed jobs and handles missing/deleted outputs.
@@ -187,7 +196,7 @@ For v0.2.0, also verify the local workflow hardening before publishing:
 - Desktop-only **Open Folder** and **Show PDF** actions open runtime output
   locations.
 
-See `packaging\RELEASE_NOTES.md` for the v0.2.0 release summary.
+See `packaging\RELEASE_NOTES.md` for the v0.2.1 release summary.
 
 Uninstall preserves runtime data by default:
 

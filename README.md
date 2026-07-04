@@ -29,13 +29,14 @@ Automatically colorize black-and-white comic and manga pages using deep learning
 - **Zero cloud dependency** — everything runs locally, no API keys needed
 - **Auto model download** — weights are downloaded automatically on first use
 
-## v0.2.0 Summary
+## v0.2.1 Summary
 
-ColorComic v0.2.0 is a local workflow hardening release for the Windows CPU
-desktop app. It adds preflight checks before long processing starts, local
-Recent Outputs history, desktop output reveal actions, safe local Preferences,
-and stronger packaging validation. The release keeps the same CPU-only desktop
-architecture and does not bundle model weights.
+ColorComic v0.2.1 is a maintenance release for the Windows CPU desktop app. It
+improves the installer build workflow with automatic Inno Setup compiler
+discovery, clearer missing-compiler diagnostics, installer preflight checks,
+post-build installer output validation, and updated packaging documentation.
+The release keeps app behavior, model behavior, CPU-only packaging, and
+first-use model downloads unchanged.
 
 ## How It Works
 

@@ -1,5 +1,37 @@
 # ColorComic Release Notes
 
+## v0.2.1 - Installer Workflow Maintenance
+
+This maintenance release keeps end-user app behavior unchanged and improves the
+Windows CPU installer build workflow for release operators.
+
+### Changed
+
+- `packaging\build_installer.ps1` now discovers `ISCC.exe` automatically from
+  an explicit `-InnoCompiler` argument, `PATH`, and common Inno Setup 6 install
+  locations.
+- Missing-compiler diagnostics now list every checked location and include
+  recovery guidance.
+- Installer builds now run preflight checks for the Inno script, PyInstaller
+  one-folder output, `ColorComic.exe`, and the `_internal` support directory
+  before invoking Inno Setup.
+- After Inno Setup completes, the installer wrapper validates that the expected
+  installer file exists, is not empty, and prints the filename, full path, and
+  size in MB.
+- Packaging documentation and validation checklists now describe the improved
+  installer workflow.
+- Installer/package version is now `0.2.1`; expected installer output is
+  `packaging\inno\output\ColorComic-Setup-0.2.1-win64-cpu.exe`.
+
+### Unchanged
+
+- No app UI changes.
+- No model behavior changes.
+- No PyInstaller spec changes.
+- No installer format changes.
+- No CUDA build.
+- No auto-updater.
+
 ## v0.2.0 - Local Workflow Hardening
 
 This release keeps the Windows CPU desktop architecture stable while improving
