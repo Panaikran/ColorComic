@@ -2,7 +2,7 @@
 
 This checklist validates the PyInstaller one-folder Windows CPU desktop build
 and unsigned Inno Setup installer. Use it for `dist\ColorComic\ColorComic.exe`
-and the v0.1.1 installer output.
+and the current unsigned installer output.
 
 ## Build Baseline
 
@@ -28,10 +28,13 @@ Run from the repo root after building:
 Expected result:
 
 - `HealthOk` is `True`
+- `PreferencesOk` is `True`
+- `RecentJobsOk` is `True`
 - `Service` is `ColorComic`
 - `MainWindowTitle` is `ColorComic`
 - `MainWindowHandle` is nonzero
 - `RuntimePath` points to `%LOCALAPPDATA%\ColorComic`
+- `ExeLocalRuntimeFolders` is empty
 - The script stops `ColorComic.exe` before returning
 
 Also confirm no repo-local or executable-local runtime folders appear:
@@ -131,7 +134,19 @@ behavior, and permissions issues that a developer machine can hide.
     - In all cases, confirm no model weights are downloaded as part of the
       preflight failure.
 
-11. First-run model download:
+11. Preferences:
+    - Confirm the upload page shows a compact Preferences section.
+    - Confirm **Default Colorization Mode** can be saved as Auto or Reference.
+    - Confirm **Open output folder after completion** can be checked and saved.
+    - Confirm device preference is shown as CPU only/read-only.
+    - Confirm there are no GPU/CUDA preference controls.
+    - Close and reopen the app.
+    - Expected: saved preferences load, missing/corrupt `preferences.json`
+      falls back to defaults without breaking the upload page, and
+      `%LOCALAPPDATA%\ColorComic\config\preferences.json` is the only
+      preferences file written.
+
+12. First-run model download:
     - Use a tiny one-page black-and-white PDF.
     - Upload it in auto mode.
     - Confirm the app downloads auto-mode weights into
@@ -142,7 +157,7 @@ behavior, and permissions issues that a developer machine can hide.
     - Confirm the UI does not freeze permanently while the download/model load
       happens.
 
-12. Tiny one-page PDF processing:
+13. Tiny one-page PDF processing:
     - Process a one-page PDF in auto mode.
     - Confirm the processing page receives progress updates.
     - Confirm preview image loads.
@@ -152,22 +167,35 @@ behavior, and permissions issues that a developer machine can hide.
     - Confirm browser-mode download still works if testing with `python app.py`.
     - Confirm the desktop-only **Open Output Folder** button opens
       `%LOCALAPPDATA%\ColorComic\output\<job_id>` in Explorer.
+    - Confirm the desktop-only **Show PDF in Folder** button reveals
+      `%LOCALAPPDATA%\ColorComic\output\<job_id>\colorized.pdf` in Explorer.
     - Confirm output files are under `%LOCALAPPDATA%\ColorComic\output`.
 
-13. Reference-mode first-run progress:
+14. Recent Outputs:
+    - Return to the upload page after at least one successful job.
+    - Confirm Recent Outputs lists newest-first completed jobs.
+    - Confirm each available safe output shows Download.
+    - In desktop mode, confirm **Show PDF** reveals the generated PDF in
+      Explorer and **Open Folder** opens the job folder.
+    - Delete or move one output PDF and reopen the app.
+    - Expected: the missing output is marked unavailable instead of crashing.
+    - If the job history file is missing or corrupt, expected: Recent Outputs
+      shows the empty state or a non-blocking load failure, not a startup crash.
+
+15. Reference-mode first-run progress:
     - Upload a PDF with a colored reference page.
     - Confirm the processing page shows visible messages such as
       `Downloading MangaNinja weights...`, `Loading SD 1.5 components...`,
       and `Loading Reference mode model...`.
     - Confirm Reference mode can still finish after the first-run downloads.
 
-14. Failed network download handling:
+16. Failed network download handling:
     - Disconnect the network or block access to Google Drive/HuggingFace.
     - Start a colorization job that needs a missing model.
     - Expected: job enters an error state and the UI shows a useful failure
       instead of hanging indefinitely.
 
-15. App close releases process and port:
+17. App close releases process and port:
     - Close the ColorComic window.
     - Confirm `ColorComic.exe` exits.
     - Confirm the localhost listening port is released:
@@ -178,7 +206,7 @@ behavior, and permissions issues that a developer machine can hide.
         Where-Object { $_.OwningProcess -eq <old-process-id> }
       ```
 
-16. SmartScreen/Defender notes:
+18. SmartScreen/Defender notes:
     - Unsigned builds may show Microsoft Defender SmartScreen warnings.
     - Defender may scan or delay first launch because the folder is large and
       contains ML/runtime DLLs.
@@ -200,6 +228,11 @@ Do not publish the one-folder build or installer if any of these fail:
 - Download PDF fails in pywebview or browser mode.
 - Open Output Folder fails to open the runtime job output folder in desktop
   mode.
+- Show PDF in Folder fails to reveal the generated runtime PDF in desktop mode.
+- Recent Outputs cannot list completed jobs or crashes on missing/corrupt
+  history.
+- Preferences cannot load/save, exposes GPU/CUDA options, or writes outside
+  `%LOCALAPPDATA%\ColorComic\config`.
 - Model download/loading progress is invisible during first-run auto or
   reference model setup.
 - Closing the window leaves `ColorComic.exe` or the Flask port running.

@@ -25,7 +25,21 @@ python scripts\verify_dependency_imports.py
 Run the focused tests:
 
 ```powershell
-python -m unittest tests.test_desktop_launcher tests.test_app_startup tests.test_runtime_paths tests.test_icon_assets tests.test_model_progress
+python -m unittest `
+  tests.test_desktop_launcher `
+  tests.test_app_startup `
+  tests.test_runtime_paths `
+  tests.test_icon_assets `
+  tests.test_model_progress `
+  tests.test_preflight `
+  tests.test_colorize_preflight `
+  tests.test_job_history `
+  tests.test_job_history_completion `
+  tests.test_recent_jobs_endpoint `
+  tests.test_recent_outputs_ui `
+  tests.test_preferences `
+  tests.test_preferences_api `
+  tests.test_upload_preferences_ui
 ```
 
 ## Build
@@ -62,6 +76,10 @@ Bundled read-only resources:
 - `README.md`
 - `THIRD_PARTY_NOTICES.md` or `NOTICE`, if present
 
+The PyInstaller spec also collects project Python modules, including the
+v0.2.0 runtime helpers under `core\preflight.py`, `core\job_history.py`, and
+`core\preferences.py`.
+
 Not bundled:
 
 - `models/weights/`
@@ -91,6 +109,11 @@ Confirm:
 - No `uploads`, `output`, or `models\weights` folders appear beside the exe.
 - Runtime folders are created under `%LOCALAPPDATA%\ColorComic`.
 - Model weights are not downloaded until starting an actual colorization job.
+- `/api/preferences` and `/api/recent-jobs` respond in the packaged app.
+- Preflight errors stop before model loading/download.
+- Recent Outputs lists completed jobs and handles missing outputs.
+- Preferences load/save under `%LOCALAPPDATA%\ColorComic\config`.
+- Desktop-only Open Folder / Show PDF output actions work for completed jobs.
 
 ## Installer
 
