@@ -39,4 +39,4 @@ if (-not $InnoCompiler -or -not (Test-Path -LiteralPath $InnoCompiler)) {
 & $InnoCompiler $ScriptPath
 
 Write-Host ""
-Write-Host "Installer output: packaging\inno\output\ColorComic-Setup-0.1.1-win64-cpu.exe"
+Write-Host "Installer output: packaging\inno\output\ColorComic-Setup-0.2.0-win64-cpu.exe"

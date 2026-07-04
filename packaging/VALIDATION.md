@@ -8,7 +8,7 @@ and the current unsigned installer output.
 
 - Expected output path: `dist\ColorComic\ColorComic.exe`
 - Expected installer path:
-  `packaging\inno\output\ColorComic-Setup-0.1.1-win64-cpu.exe`
+  `packaging\inno\output\ColorComic-Setup-0.2.0-win64-cpu.exe`
 - Expected build type: PyInstaller one-folder, not one-file
 - Observed local output size: about 2.17 GB for the full `dist\ColorComic`
   folder

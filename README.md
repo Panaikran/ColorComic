@@ -21,10 +21,21 @@ Automatically colorize black-and-white comic and manga pages using deep learning
 - **Cross-page color consistency** — LAB color transfer keeps character/environment colors consistent across pages (auto mode)
 - **Live preview** — side-by-side original vs. colorized comparison updates in real-time during processing
 - **PDF in, PDF out** — upload a B&W comic PDF, download a colorized PDF with a source-aware filename
-- **Desktop output access** — desktop mode can open the completed job's output folder directly
+- **Preflight validation** — invalid PDFs, empty PDFs, invalid reference images, and output write problems are caught before model loading
+- **Recent Outputs** — completed local jobs are listed newest-first with download and desktop output actions
+- **Local Preferences** — save safe local defaults such as Auto/Reference mode and whether to open output folders after completion
+- **Desktop output access** — desktop mode can open completed job folders and reveal generated PDFs in Explorer
 - **Visible first-run progress** — model downloads and model loading phases are shown on the processing page
 - **Zero cloud dependency** — everything runs locally, no API keys needed
 - **Auto model download** — weights are downloaded automatically on first use
+
+## v0.2.0 Summary
+
+ColorComic v0.2.0 is a local workflow hardening release for the Windows CPU
+desktop app. It adds preflight checks before long processing starts, local
+Recent Outputs history, desktop output reveal actions, safe local Preferences,
+and stronger packaging validation. The release keeps the same CPU-only desktop
+architecture and does not bundle model weights.
 
 ## How It Works
 
@@ -167,7 +178,8 @@ python desktop.py
 
 Desktop mode starts the same Flask backend on an available `127.0.0.1` port and opens it with pywebview.
 The Windows desktop/package icon is shared from `static/img/colorcomic.ico`.
-In desktop mode, completed jobs include an **Open Output Folder** button that opens the job folder under `%LOCALAPPDATA%\ColorComic\output`.
+In desktop mode, completed jobs include output actions that open the job folder
+or reveal the generated PDF under `%LOCALAPPDATA%\ColorComic\output`.
 
 To verify the packaging-critical imports in a clean CPU desktop environment:
 
@@ -181,7 +193,7 @@ python scripts/verify_dependency_imports.py
 2. **Choose mode** — Select "Auto" for automatic colorization or "Reference" for reference-based (upload a colored reference image)
 3. **Detect GPU** — Click "Detect GPU" to see your hardware specs and pick CPU or GPU
 4. **Colorize** — Hit "Upload & Colorize" and watch download, model-load, and per-page progress with live previews
-5. **Download** — Get the colorized PDF using a source-aware filename, open the output folder in desktop mode, or review individual pages
+5. **Download** — Get the colorized PDF using a source-aware filename, use Recent Outputs, open/reveal output files in desktop mode, or review individual pages
 
 ## Configuration
 
@@ -252,6 +264,9 @@ ColorComic/
 | `GET` | `/api/preview/<job_id>/<page>` | Serve a colorized page image |
 | `GET` | `/pages/<job_id>/<page>` | Serve an original B&W page image |
 | `GET` | `/api/download/<job_id>` | Download the colorized PDF |
+| `GET` | `/api/recent-jobs` | List local completed jobs |
+| `GET` | `/api/preferences` | Load local UI preferences |
+| `POST` | `/api/preferences` | Save safe local UI preferences |
 | `GET` | `/api/gpu-info` | GPU detection (name, VRAM, compute capability) |
 | `GET` | `/api/status` | Model health check (device, mode, CUDA status) |
 | `GET` | `/processing/<job_id>` | Processing page with live preview |

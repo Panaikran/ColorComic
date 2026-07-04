@@ -1,5 +1,59 @@
 # ColorComic Release Notes
 
+## v0.2.0 - Local Workflow Hardening
+
+This release keeps the Windows CPU desktop architecture stable while improving
+local reliability before and after colorization. It keeps the Flask backend,
+pywebview desktop shell, PyInstaller one-folder build, Inno Setup installer,
+CPU-only default packaging, and first-use model downloads.
+
+### Added
+
+- Preflight checks for uploaded PDFs, output directories, and Reference mode
+  images before model download/load begins.
+- Local Recent Outputs history stored under `%LOCALAPPDATA%\ColorComic`.
+- Recent Outputs list on the upload page with Download plus desktop-only output
+  actions when files are still available.
+- Desktop-only **Show PDF in Folder** action for completed outputs.
+- Local Preferences storage and API under
+  `%LOCALAPPDATA%\ColorComic\config\preferences.json`.
+- Compact Preferences section for safe local defaults:
+  - default colorization mode: Auto or Reference
+  - open output folder after completion
+  - CPU-only device shown read-only
+
+### Changed
+
+- Preflight failures now stop before long CPU/model work and surface clearer
+  user-facing messages.
+- PyInstaller packaging now explicitly includes the v0.2.0 runtime helper
+  modules: `core.preflight`, `core.job_history`, and `core.preferences`.
+- Packaged smoke validation now checks `/api/preferences`, `/api/recent-jobs`,
+  and executable-local runtime folders.
+- Installer/package version is now `0.2.0`; expected installer output is
+  `packaging\inno\output\ColorComic-Setup-0.2.0-win64-cpu.exe`.
+
+### Unchanged
+
+- No model behavior changes.
+- No CUDA build.
+- No auto-updater.
+- No cloud features or telemetry.
+- Model weights are still downloaded on first use and are not bundled.
+- Runtime data is still stored under `%LOCALAPPDATA%\ColorComic`.
+
+### Validation Focus
+
+- Invalid PDFs, empty PDFs, invalid Reference images, and unwritable output
+  folders fail before model download/load.
+- Recent Outputs lists completed jobs newest-first and handles deleted outputs
+  gracefully.
+- Download, Open Folder, and Show PDF output actions work in desktop mode.
+- Preferences load/save locally, expose no GPU/CUDA option, and recover from
+  missing or corrupt preferences files.
+- Packaged builds still write runtime data only under
+  `%LOCALAPPDATA%\ColorComic` and do not bundle model weights.
+
 ## v0.1.1 - Windows CPU Desktop Polish
 
 This is a small polish and bugfix release on top of the v0.1.0 Windows CPU

@@ -132,7 +132,7 @@ Or use the wrapper:
 Expected installer output:
 
 ```text
-packaging\inno\output\ColorComic-Setup-0.1.1-win64-cpu.exe
+packaging\inno\output\ColorComic-Setup-0.2.0-win64-cpu.exe
 ```
 
 The installer copies `dist\ColorComic` into Program Files, creates a Start Menu
@@ -142,16 +142,17 @@ uninstall entry.
 The app, installer, and shortcuts use the shared icon asset at
 `static\img\colorcomic.ico`.
 
-For v0.1.1, also verify the desktop polish fixes before publishing:
+For v0.2.0, also verify the local workflow hardening before publishing:
 
-- Browser favicon and packaged app/shortcut icons use the shared icon.
-- The processing page shows first-run model download/loading messages.
-- Downloaded PDFs use `<original-name>-colorized.pdf` when the original PDF
-  name is available.
-- The desktop-only **Open Output Folder** button opens the runtime job output
-  directory.
+- Preflight errors stop before model download/load.
+- Recent Outputs lists completed jobs and handles missing/deleted outputs.
+- Preferences load/save under `%LOCALAPPDATA%\ColorComic\config`.
+- Downloaded PDFs still use `<original-name>-colorized.pdf` when the original
+  PDF name is available.
+- Desktop-only **Open Folder** and **Show PDF** actions open runtime output
+  locations.
 
-See `packaging\RELEASE_NOTES.md` for the v0.1.1 release summary.
+See `packaging\RELEASE_NOTES.md` for the v0.2.0 release summary.
 
 Uninstall preserves runtime data by default:
 
