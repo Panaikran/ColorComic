@@ -7,7 +7,10 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 $DistDir = Join-Path $RepoRoot "dist\ColorComic"
 $DistExe = Join-Path $DistDir "ColorComic.exe"
-$ScriptPath = Join-Path $RepoRoot "packaging\inno\ColorComic.iss"
+$InnoDir = Join-Path $RepoRoot "packaging\inno"
+$ScriptPath = Join-Path $InnoDir "ColorComic.iss"
+$InstallerFileName = "ColorComic-Setup-0.2.0-win64-cpu.exe"
+$InstallerOutputPath = Join-Path (Join-Path $InnoDir "output") $InstallerFileName
 $CheckedInnoLocations = New-Object System.Collections.Generic.List[string]
 $InnoCandidates = New-Object System.Collections.Generic.List[object]
 
@@ -95,6 +98,23 @@ function Assert-InstallerBuildInputs {
     }
 }
 
+function Assert-InstallerOutput {
+    if (-not (Test-Path -LiteralPath $InstallerOutputPath -PathType Leaf)) {
+        throw "Installer validation failed: expected output was not created: $InstallerOutputPath"
+    }
+
+    $installer = Get-Item -LiteralPath $InstallerOutputPath
+    if ($installer.Length -le 0) {
+        throw "Installer validation failed: output file is empty: $InstallerOutputPath"
+    }
+
+    $sizeMb = [math]::Round($installer.Length / 1MB, 2)
+    Write-Host ""
+    Write-Host "Installer filename: $InstallerFileName"
+    Write-Host "Installer path: $($installer.FullName)"
+    Write-Host "Installer size: $sizeMb MB"
+}
+
 Assert-InstallerBuildInputs
 
 if ($InnoCompiler) {
@@ -127,5 +147,4 @@ if (-not $ResolvedInnoCompiler) {
 
 & $ResolvedInnoCompiler $ScriptPath
 
-Write-Host ""
-Write-Host "Installer output: packaging\inno\output\ColorComic-Setup-0.2.0-win64-cpu.exe"
+Assert-InstallerOutput

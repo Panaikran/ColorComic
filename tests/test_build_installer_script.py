@@ -43,7 +43,8 @@ class BuildInstallerScriptTests(unittest.TestCase):
 
         self.assertIn('$DistDir = Join-Path $RepoRoot "dist\\ColorComic"', script)
         self.assertIn('$DistExe = Join-Path $DistDir "ColorComic.exe"', script)
-        self.assertIn('$ScriptPath = Join-Path $RepoRoot "packaging\\inno\\ColorComic.iss"', script)
+        self.assertIn('$InnoDir = Join-Path $RepoRoot "packaging\\inno"', script)
+        self.assertIn('$ScriptPath = Join-Path $InnoDir "ColorComic.iss"', script)
         self.assertIn("function Assert-InstallerBuildInputs", script)
         self.assertIn("Test-Path -LiteralPath $ScriptPath -PathType Leaf", script)
         self.assertIn("Test-Path -LiteralPath $DistDir -PathType Container", script)
@@ -59,6 +60,25 @@ class BuildInstallerScriptTests(unittest.TestCase):
         preflight_call = script.rindex("Assert-InstallerBuildInputs")
         self.assertLess(preflight_call, script.index("Get-Command ISCC.exe"))
         self.assertLess(preflight_call, script.index("& $ResolvedInnoCompiler $ScriptPath"))
+
+    def test_installer_output_validation_checks_file_and_size(self):
+        script = self.read_script()
+
+        self.assertIn('$InstallerFileName = "ColorComic-Setup-0.2.0-win64-cpu.exe"', script)
+        self.assertIn('$InstallerOutputPath = Join-Path (Join-Path $InnoDir "output") $InstallerFileName', script)
+        self.assertIn("function Assert-InstallerOutput", script)
+        self.assertIn("Test-Path -LiteralPath $InstallerOutputPath -PathType Leaf", script)
+        self.assertIn("Get-Item -LiteralPath $InstallerOutputPath", script)
+        self.assertIn("$installer.Length -le 0", script)
+        self.assertIn("Installer validation failed", script)
+
+    def test_installer_output_validation_reports_artifact_details_after_compile(self):
+        script = self.read_script()
+
+        self.assertIn("Installer filename: $InstallerFileName", script)
+        self.assertIn("Installer path: $($installer.FullName)", script)
+        self.assertIn("Installer size: $sizeMb MB", script)
+        self.assertLess(script.index("& $ResolvedInnoCompiler $ScriptPath"), script.rindex("Assert-InstallerOutput"))
 
     def test_slice_does_not_bump_installer_version(self):
         script = self.read_script()
