@@ -7,6 +7,7 @@ from core.batch_queue import (
     STATUS_FAILED,
     STATUS_QUEUED,
     STATUS_RUNNING,
+    SingleWorkerBatchRunner,
     create_batch,
     transition_job,
 )
@@ -90,6 +91,86 @@ class BatchQueueTests(unittest.TestCase):
         self.assertEqual(batch.status, STATUS_CANCELLED)
         self.assertEqual(batch.completed_at, "2026-07-05T01:02:00Z")
         self.assertTrue(batch.is_terminal)
+
+    def test_single_worker_processes_jobs_sequentially(self):
+        batch = create_batch("batch-1", ["job-1", "job-2", "job-3"])
+        runner = SingleWorkerBatchRunner()
+        order = []
+        active_seen = []
+
+        def process(job_id):
+            order.append(job_id)
+            active_seen.append(runner.active_job_id)
+            return True
+
+        result = runner.start(batch, process)
+
+        self.assertEqual(order, ["job-1", "job-2", "job-3"])
+        self.assertEqual(active_seen, ["job-1", "job-2", "job-3"])
+        self.assertEqual(result.processed_job_ids, ("job-1", "job-2", "job-3"))
+        self.assertEqual(result.failed_job_ids, ())
+        self.assertEqual(result.batch.status, STATUS_COMPLETED)
+        self.assertEqual(result.batch.counts.completed, 3)
+        self.assertIsNone(runner.active_job_id)
+
+    def test_single_worker_continues_after_job_failure(self):
+        batch = create_batch("batch-1", ["job-1", "job-2", "job-3"])
+        runner = SingleWorkerBatchRunner()
+        order = []
+
+        def process(job_id):
+            order.append(job_id)
+            if job_id == "job-2":
+                raise RuntimeError("job failed")
+            return True
+
+        result = runner.start(batch, process)
+
+        self.assertEqual(order, ["job-1", "job-2", "job-3"])
+        self.assertEqual(result.processed_job_ids, ("job-1", "job-2", "job-3"))
+        self.assertEqual(result.failed_job_ids, ("job-2",))
+        self.assertEqual(result.batch.job_statuses["job-1"], STATUS_COMPLETED)
+        self.assertEqual(result.batch.job_statuses["job-2"], STATUS_FAILED)
+        self.assertEqual(result.batch.job_statuses["job-3"], STATUS_COMPLETED)
+        self.assertEqual(result.batch.status, STATUS_FAILED)
+        self.assertTrue(result.batch.is_terminal)
+
+    def test_single_worker_marks_false_callback_result_failed(self):
+        batch = create_batch("batch-1", ["job-1", "job-2"])
+        runner = SingleWorkerBatchRunner()
+
+        def process(job_id):
+            return job_id != "job-1"
+
+        result = runner.start(batch, process)
+
+        self.assertEqual(result.failed_job_ids, ("job-1",))
+        self.assertEqual(result.batch.job_statuses["job-1"], STATUS_FAILED)
+        self.assertEqual(result.batch.job_statuses["job-2"], STATUS_COMPLETED)
+        self.assertEqual(result.batch.status, STATUS_FAILED)
+
+    def test_single_worker_rejects_duplicate_start(self):
+        batch = create_batch("batch-1", ["job-1"])
+        runner = SingleWorkerBatchRunner()
+        result = runner.start(batch, lambda job_id: True)
+
+        with self.assertRaises(BatchQueueError):
+            runner.start(batch, lambda job_id: True)
+        with self.assertRaises(BatchQueueError):
+            runner.start(result.batch, lambda job_id: True)
+
+    def test_single_worker_idle_when_no_queued_jobs_remain(self):
+        batch = create_batch("batch-1", ["job-1"])
+        batch = transition_job(batch, "job-1", STATUS_RUNNING)
+        runner = SingleWorkerBatchRunner()
+        called = []
+
+        result = runner.run_until_idle(batch, lambda job_id: called.append(job_id))
+
+        self.assertEqual(called, [])
+        self.assertEqual(result.processed_job_ids, ())
+        self.assertEqual(result.failed_job_ids, ())
+        self.assertEqual(result.batch, batch)
 
 
 if __name__ == "__main__":

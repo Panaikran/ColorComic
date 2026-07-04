@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, replace
 from datetime import datetime, timezone
-from typing import Mapping
+from typing import Callable, Mapping
 
 
 STATUS_QUEUED = "queued"
@@ -43,6 +43,9 @@ class BatchQueueError(ValueError):
     """Raised when a batch queue state change is invalid."""
 
 
+ProcessingCallback = Callable[[str], object]
+
+
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
@@ -77,6 +80,13 @@ class BatchRecord:
     @property
     def is_terminal(self) -> bool:
         return self.status in TERMINAL_STATUSES
+
+
+@dataclass(frozen=True)
+class BatchRunResult:
+    batch: BatchRecord
+    processed_job_ids: tuple[str, ...]
+    failed_job_ids: tuple[str, ...]
 
 
 def create_batch(batch_id: str, job_ids: list[str] | tuple[str, ...], now: str | None = None) -> BatchRecord:
@@ -175,3 +185,60 @@ def derive_batch_status(job_statuses: Mapping[str, str], started_at: str | None 
     if started_at is not None or terminal_count > 0:
         return STATUS_RUNNING
     return STATUS_QUEUED
+
+
+def next_queued_job_id(batch: BatchRecord) -> str | None:
+    for job_id in batch.job_ids:
+        if batch.job_statuses[job_id] == STATUS_QUEUED:
+            return job_id
+    return None
+
+
+class SingleWorkerBatchRunner:
+    """Run queued batch jobs sequentially with an injected processing callback."""
+
+    def __init__(self):
+        self._started_batch_ids: set[str] = set()
+        self.active_job_id: str | None = None
+
+    def start(self, batch: BatchRecord, process_job: ProcessingCallback) -> BatchRunResult:
+        if batch.batch_id in self._started_batch_ids or batch.started_at is not None:
+            raise BatchQueueError(f"Batch has already been started: {batch.batch_id}")
+        if batch.status != STATUS_QUEUED:
+            raise BatchQueueError(f"Batch cannot be started from status: {batch.status}")
+
+        self._started_batch_ids.add(batch.batch_id)
+        return self.run_until_idle(batch, process_job)
+
+    def run_until_idle(self, batch: BatchRecord, process_job: ProcessingCallback) -> BatchRunResult:
+        processed_job_ids: list[str] = []
+        failed_job_ids: list[str] = []
+        current_batch = batch
+
+        while not current_batch.is_terminal:
+            job_id = next_queued_job_id(current_batch)
+            if job_id is None:
+                break
+
+            current_batch = transition_job(current_batch, job_id, STATUS_RUNNING)
+            self.active_job_id = job_id
+            processed_job_ids.append(job_id)
+            try:
+                result = process_job(job_id)
+            except Exception:
+                failed_job_ids.append(job_id)
+                current_batch = transition_job(current_batch, job_id, STATUS_FAILED)
+            else:
+                if result is False:
+                    failed_job_ids.append(job_id)
+                    current_batch = transition_job(current_batch, job_id, STATUS_FAILED)
+                else:
+                    current_batch = transition_job(current_batch, job_id, STATUS_COMPLETED)
+            finally:
+                self.active_job_id = None
+
+        return BatchRunResult(
+            batch=current_batch,
+            processed_job_ids=tuple(processed_job_ids),
+            failed_job_ids=tuple(failed_job_ids),
+        )
