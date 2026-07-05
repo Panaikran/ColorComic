@@ -6,6 +6,7 @@ const uploadBtn = document.getElementById('uploadBtn');
 const fileInfo = document.getElementById('fileInfo');
 
 let selectedFile = null;
+let selectedFiles = [];
 let selectedRefFile = null;
 
 // ── PDF Drag and Drop ───────────────────────────────────────────────────────
@@ -25,21 +26,45 @@ dropZone.addEventListener('drop', e => {
     e.preventDefault();
     dropZone.classList.remove('dragover');
     const files = e.dataTransfer.files;
-    if (files.length && files[0].name.toLowerCase().endsWith('.pdf')) {
-        selectFile(files[0]);
-    }
+    if (files.length) selectFiles(files);
 });
 
 fileInput.addEventListener('change', () => {
-    if (fileInput.files.length) selectFile(fileInput.files[0]);
+    if (fileInput.files.length) selectFiles(fileInput.files);
 });
 
-function selectFile(file) {
-    selectedFile = file;
-    document.getElementById('fileName').textContent = file.name;
-    const sizeMB = (file.size / (1024 * 1024)).toFixed(1);
-    document.getElementById('fileSize').textContent = `(${sizeMB} MB)`;
+function isPdfFile(file) {
+    return /\.pdf$/i.test(file.name);
+}
+
+function selectFiles(fileList) {
+    selectedFiles = Array.from(fileList).filter(isPdfFile);
+    selectedFile = selectedFiles.length ? selectedFiles[0] : null;
+
+    if (!selectedFiles.length) {
+        fileInfo.style.display = 'none';
+        hideBatchResult();
+        updateUploadButtonState();
+        return;
+    }
+
+    const fileName = document.getElementById('fileName');
+    const fileSize = document.getElementById('fileSize');
+    const fileHint = document.getElementById('fileHint');
+    const totalSize = selectedFiles.reduce((sum, file) => sum + file.size, 0);
+    const sizeMB = (totalSize / (1024 * 1024)).toFixed(1);
+
+    if (selectedFiles.length === 1) {
+        fileName.textContent = selectedFile.name;
+        fileSize.textContent = `(${sizeMB} MB)`;
+        fileHint.textContent = 'Single PDF selected. Upload will start the normal colorization flow.';
+    } else {
+        fileName.textContent = `${selectedFiles.length} PDFs selected`;
+        fileSize.textContent = `(${sizeMB} MB total)`;
+        fileHint.textContent = 'Batch creation supports Auto mode only and will not start processing yet.';
+    }
     fileInfo.style.display = 'block';
+    hideBatchResult();
     updateUploadButtonState();
 }
 
@@ -230,7 +255,12 @@ function clearRefFile() {
 
 function updateUploadButtonState() {
     const mode = getSelectedMode();
-    if (!selectedFile) {
+    uploadBtn.textContent = selectedFiles.length > 1 ? 'Create Batch' : 'Upload & Colorize';
+    if (!selectedFiles.length) {
+        uploadBtn.disabled = true;
+        return;
+    }
+    if (selectedFiles.length > 1 && mode === 'reference') {
         uploadBtn.disabled = true;
         return;
     }
@@ -299,9 +329,101 @@ document.getElementById('detectGpuBtn').addEventListener('click', async () => {
 
 // ── Upload ──────────────────────────────────────────────────────────────────
 
+const batchResult = document.getElementById('batchResult');
+const batchIdText = document.getElementById('batchIdText');
+const batchAcceptedBlock = document.getElementById('batchAcceptedBlock');
+const batchAcceptedList = document.getElementById('batchAcceptedList');
+const batchErrorsBlock = document.getElementById('batchErrorsBlock');
+const batchErrorList = document.getElementById('batchErrorList');
+
+function hideBatchResult() {
+    if (batchResult) batchResult.style.display = 'none';
+}
+
+function appendBatchListItem(list, primary, secondary) {
+    const item = document.createElement('li');
+    const strong = document.createElement('strong');
+    strong.textContent = primary;
+    item.appendChild(strong);
+    if (secondary) {
+        const meta = document.createElement('span');
+        meta.className = 'text-dim';
+        meta.textContent = ` - ${secondary}`;
+        item.appendChild(meta);
+    }
+    list.appendChild(item);
+}
+
+function renderBatchResult(data) {
+    if (!batchResult) return;
+
+    const jobs = Array.isArray(data.jobs) ? data.jobs : [];
+    const errors = Array.isArray(data.errors) ? data.errors : [];
+    batchIdText.textContent = data.batch_id ? `Batch ID: ${data.batch_id}` : 'No batch was created.';
+    batchAcceptedList.replaceChildren();
+    batchErrorList.replaceChildren();
+
+    jobs.forEach(job => {
+        const pageText = Number.isInteger(job.page_count)
+            ? `${job.page_count} page${job.page_count === 1 ? '' : 's'}`
+            : 'Queued';
+        appendBatchListItem(batchAcceptedList, job.filename || job.job_id, pageText);
+    });
+    errors.forEach(error => {
+        appendBatchListItem(
+            batchErrorList,
+            error.filename || 'File',
+            error.message || error.code || 'Could not prepare this PDF.',
+        );
+    });
+
+    batchAcceptedBlock.style.display = jobs.length ? 'block' : 'none';
+    batchErrorsBlock.style.display = errors.length ? 'block' : 'none';
+    batchResult.style.display = 'block';
+}
+
+async function createBatchUpload() {
+    const formData = new FormData();
+    selectedFiles.forEach(file => formData.append('files', file));
+    formData.append('mode', 'auto');
+
+    const style = document.querySelector('input[name="style"]:checked');
+    if (style) formData.append('style', style.value);
+
+    const device = document.querySelector('input[name="device"]:checked');
+    if (device) formData.append('device', device.value);
+
+    const progress = document.getElementById('uploadProgress');
+    progress.style.display = 'block';
+    document.getElementById('uploadStatus').textContent = 'Creating batch...';
+    document.getElementById('uploadFill').style.width = '40%';
+
+    const res = await fetch('/api/batches', { method: 'POST', body: formData });
+    const data = await res.json();
+    if (!res.ok && data.error) throw new Error(data.error);
+
+    renderBatchResult(data);
+    document.getElementById('uploadFill').style.width = '100%';
+    document.getElementById('uploadStatus').textContent = data.batch_id
+        ? 'Batch created. Processing has not started yet.'
+        : 'No PDFs were accepted for this batch.';
+}
+
 uploadBtn.addEventListener('click', async () => {
-    if (!selectedFile) return;
+    if (!selectedFiles.length) return;
     uploadBtn.disabled = true;
+
+    if (selectedFiles.length > 1) {
+        try {
+            await createBatchUpload();
+        } catch (err) {
+            document.getElementById('uploadProgress').style.display = 'block';
+            document.getElementById('uploadStatus').textContent = 'Batch creation failed: ' + err.message;
+        } finally {
+            updateUploadButtonState();
+        }
+        return;
+    }
 
     const formData = new FormData();
     formData.append('file', selectedFile);

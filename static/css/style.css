@@ -618,6 +618,41 @@ input:focus, select:focus, textarea:focus {
     font-size: 0.9rem;
 }
 
+.file-info p {
+    margin-top: 0.35rem;
+    line-height: 1.4;
+}
+
+.batch-result {
+    padding: 0.85rem;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+}
+
+.batch-result-header {
+    margin-bottom: 0.75rem;
+}
+
+.batch-result h3 {
+    font-size: 1rem;
+    margin-bottom: 0.25rem;
+}
+
+.batch-result h4 {
+    font-size: 0.9rem;
+    margin: 0.75rem 0 0.35rem;
+}
+
+.batch-result ul {
+    margin-left: 1.25rem;
+}
+
+.batch-result li {
+    margin: 0.25rem 0;
+    overflow-wrap: anywhere;
+}
+
 .recent-outputs-header {
     display: flex;
     justify-content: space-between;

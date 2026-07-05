@@ -9,13 +9,14 @@
         <div class="upload-zone" id="dropZone">
             <div class="icon">&#128196;</div>
             <p><strong>Drop your PDF here</strong></p>
-            <p>or click to browse</p>
-            <input type="file" id="fileInput" accept=".pdf">
+            <p>or select multiple PDFs to create a batch</p>
+            <input type="file" id="fileInput" accept=".pdf" multiple>
         </div>
 
         <div id="fileInfo" class="file-info" style="display:none;">
             <strong id="fileName"></strong>
             <span id="fileSize" class="text-dim" style="margin-left:0.5rem;"></span>
+            <p id="fileHint" class="text-dim"></p>
         </div>
 
         <div class="form-group mt-2">
@@ -131,6 +132,24 @@
                 <span id="uploadStatus">Uploading...</span>
             </div>
         </div>
+
+        <section id="batchResult" class="batch-result mt-2" style="display:none;" aria-live="polite">
+            <div class="batch-result-header">
+                <div>
+                    <h3>Batch Created</h3>
+                    <p class="text-dim" id="batchIdText"></p>
+                </div>
+            </div>
+            <div id="batchAcceptedBlock" style="display:none;">
+                <h4>Accepted PDFs</h4>
+                <ul id="batchAcceptedList"></ul>
+            </div>
+            <div id="batchErrorsBlock" style="display:none;">
+                <h4>Files That Need Attention</h4>
+                <ul id="batchErrorList"></ul>
+            </div>
+            <p class="text-dim">Processing has not started yet.</p>
+        </section>
     </div>
 
     <section class="card mt-3" id="recentOutputsSection" aria-labelledby="recentOutputsTitle">
