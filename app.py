@@ -15,7 +15,13 @@ import uuid
 from datetime import datetime, timezone
 
 from config import Config
-from core.batch_queue import create_batch
+from core.batch_queue import (
+    BatchQueueError,
+    STATUS_QUEUED,
+    STATUS_RUNNING,
+    SingleWorkerBatchRunner,
+    create_batch,
+)
 from core.job_history import JobHistoryEntry, append_job_history, load_job_history
 from core.preflight import validate_colorize_preflight
 from core.preferences import load_preferences, save_preferences
@@ -24,11 +30,13 @@ from core.preferences import load_preferences, save_preferences
 jobs = {}
 job_queues = {}
 batches = {}
+active_batch_runners = {}
 logger = logging.getLogger(__name__)
 
 _model_manager = None
 _post_processor = None
 _runtime_lock = threading.Lock()
+_batch_lock = threading.Lock()
 _torch_runtime_configured = False
 
 
@@ -288,6 +296,41 @@ def _batch_payload(batch) -> dict:
         "completed_at": batch.completed_at,
         "jobs": [_batch_job_payload(batch, job_id) for job_id in batch.job_ids],
     }
+
+
+def _store_batch_update(batch) -> None:
+    with _batch_lock:
+        batches[batch.batch_id] = batch
+
+
+def _run_batch(batch_id: str, runner: SingleWorkerBatchRunner) -> None:
+    batch = batches[batch_id]
+
+    def process_job(job_id: str) -> bool:
+        job = jobs.get(job_id)
+        if not job:
+            raise RuntimeError(f"Job not found: {job_id}")
+
+        q = queue.Queue()
+        job_queues[job_id] = q
+        out_dir = os.path.join(Config.OUTPUT_FOLDER, job_id)
+        os.makedirs(out_dir, exist_ok=True)
+        try:
+            return _run_colorization_job(job_id, job, q, out_dir)
+        except Exception:
+            logger.exception("Batch job %s failed before completion", job_id)
+            raise
+        finally:
+            job_queues.pop(job_id, None)
+
+    try:
+        result = runner.start(batch, process_job)
+        _store_batch_update(result.batch)
+    except Exception:
+        logger.exception("Batch processing failed for batch %s", batch_id)
+    finally:
+        with _batch_lock:
+            active_batch_runners.pop(batch_id, None)
 
 
 def _configure_torch_runtime():
@@ -708,6 +751,36 @@ def create_app():
         if not batch:
             return jsonify({"error": "Batch not found"}), 404
         return jsonify(_batch_payload(batch))
+
+    @app.route("/api/batches/<batch_id>/start", methods=["POST"])
+    def start_batch(batch_id):
+        with _batch_lock:
+            batch = batches.get(batch_id)
+            if not batch:
+                return jsonify({"error": "Batch not found"}), 404
+            if batch_id in active_batch_runners or batch.status == STATUS_RUNNING:
+                return jsonify({"error": "Batch is already running"}), 409
+            if batch.status != STATUS_QUEUED:
+                return jsonify({"error": f"Batch cannot be started from status: {batch.status}"}), 409
+            if batch.counts.queued == 0:
+                return jsonify({"error": "Batch has no queued jobs"}), 400
+
+            runner = SingleWorkerBatchRunner(on_update=_store_batch_update)
+            active_batch_runners[batch_id] = runner
+
+        try:
+            threading.Thread(target=lambda: _run_batch(batch_id, runner), daemon=True).start()
+        except BatchQueueError as exc:
+            with _batch_lock:
+                active_batch_runners.pop(batch_id, None)
+            return jsonify({"error": str(exc)}), 409
+        except Exception as exc:
+            logger.exception("Failed to start batch %s", batch_id)
+            with _batch_lock:
+                active_batch_runners.pop(batch_id, None)
+            return jsonify({"error": f"Could not start batch: {exc}"}), 500
+
+        return jsonify({"ok": True, "batch_id": batch_id, "status": "started"})
 
     @app.route("/pages/<job_id>/<int:page_num>")
     def serve_page(job_id, page_num):

@@ -44,6 +44,7 @@ class BatchQueueError(ValueError):
 
 
 ProcessingCallback = Callable[[str], object]
+BatchUpdateCallback = Callable[["BatchRecord"], None]
 
 
 def utc_now_iso() -> str:
@@ -197,9 +198,14 @@ def next_queued_job_id(batch: BatchRecord) -> str | None:
 class SingleWorkerBatchRunner:
     """Run queued batch jobs sequentially with an injected processing callback."""
 
-    def __init__(self):
+    def __init__(self, on_update: BatchUpdateCallback | None = None):
         self._started_batch_ids: set[str] = set()
         self.active_job_id: str | None = None
+        self._on_update = on_update
+
+    def _emit_update(self, batch: BatchRecord) -> None:
+        if self._on_update:
+            self._on_update(batch)
 
     def start(self, batch: BatchRecord, process_job: ProcessingCallback) -> BatchRunResult:
         if batch.batch_id in self._started_batch_ids or batch.started_at is not None:
@@ -221,6 +227,7 @@ class SingleWorkerBatchRunner:
                 break
 
             current_batch = transition_job(current_batch, job_id, STATUS_RUNNING)
+            self._emit_update(current_batch)
             self.active_job_id = job_id
             processed_job_ids.append(job_id)
             try:
@@ -228,12 +235,15 @@ class SingleWorkerBatchRunner:
             except Exception:
                 failed_job_ids.append(job_id)
                 current_batch = transition_job(current_batch, job_id, STATUS_FAILED)
+                self._emit_update(current_batch)
             else:
                 if result is False:
                     failed_job_ids.append(job_id)
                     current_batch = transition_job(current_batch, job_id, STATUS_FAILED)
+                    self._emit_update(current_batch)
                 else:
                     current_batch = transition_job(current_batch, job_id, STATUS_COMPLETED)
+                    self._emit_update(current_batch)
             finally:
                 self.active_job_id = None
 

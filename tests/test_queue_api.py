@@ -6,6 +6,7 @@ import types
 import unittest
 
 from core.batch_queue import (
+    BatchRecord,
     STATUS_COMPLETED,
     STATUS_FAILED,
     STATUS_QUEUED,
@@ -32,6 +33,15 @@ class FakeFlask:
             return func
 
         return decorator
+
+
+class ImmediateThread:
+    def __init__(self, target, daemon=False):
+        self.target = target
+        self.daemon = daemon
+
+    def start(self):
+        self.target()
 
 
 def install_fake_flask():
@@ -85,6 +95,7 @@ class QueueApiTests(unittest.TestCase):
         self.app_module.jobs.clear()
         self.app_module.job_queues.clear()
         self.app_module.batches.clear()
+        self.app_module.active_batch_runners.clear()
         for name in self.modules_to_clear:
             sys.modules.pop(name, None)
 
@@ -164,6 +175,103 @@ class QueueApiTests(unittest.TestCase):
 
         self.assertEqual(status, 404)
         self.assertEqual(response["error"], "Batch not found")
+
+    def test_batch_start_processes_queued_jobs(self):
+        app = self.app_module
+        original_thread = app.threading.Thread
+        original_worker = app._run_colorization_job
+        original_output_folder = app.Config.OUTPUT_FOLDER
+        order = []
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            app.Config.OUTPUT_FOLDER = os.path.join(temp_dir, "output")
+            app.jobs["job-1"] = make_job("job-1", "first.pdf")
+            app.jobs["job-2"] = make_job("job-2", "second.pdf")
+            app.batches["batch-1"] = create_batch("batch-1", ["job-1", "job-2"])
+            app.threading.Thread = ImmediateThread
+            app._run_colorization_job = lambda job_id, job, event_queue, out_dir: order.append(job_id) or True
+
+            try:
+                response = self.flask_app.routes["/api/batches/<batch_id>/start"]("batch-1")
+            finally:
+                app.threading.Thread = original_thread
+                app._run_colorization_job = original_worker
+                app.Config.OUTPUT_FOLDER = original_output_folder
+
+        self.assertEqual(response["ok"], True)
+        self.assertEqual(response["batch_id"], "batch-1")
+        self.assertEqual(response["status"], "started")
+        self.assertEqual(order, ["job-1", "job-2"])
+        self.assertEqual(app.batches["batch-1"].status, STATUS_COMPLETED)
+        self.assertEqual(app.batches["batch-1"].counts.completed, 2)
+        self.assertEqual(app.active_batch_runners, {})
+
+    def test_batch_start_rejects_duplicate_running_batch(self):
+        app = self.app_module
+        app.jobs["job-1"] = make_job("job-1", "first.pdf")
+        batch = create_batch("batch-1", ["job-1"])
+        app.batches["batch-1"] = transition_job(batch, "job-1", STATUS_RUNNING)
+
+        response, status = self.flask_app.routes["/api/batches/<batch_id>/start"]("batch-1")
+
+        self.assertEqual(status, 409)
+        self.assertEqual(response["error"], "Batch is already running")
+
+    def test_batch_start_missing_batch_returns_404(self):
+        response, status = self.flask_app.routes["/api/batches/<batch_id>/start"]("missing")
+
+        self.assertEqual(status, 404)
+        self.assertEqual(response["error"], "Batch not found")
+
+    def test_batch_start_rejects_empty_batch(self):
+        app = self.app_module
+        app.batches["empty"] = BatchRecord(
+            batch_id="empty",
+            job_ids=(),
+            job_statuses={},
+            status=STATUS_QUEUED,
+            created_at="2026-07-05T01:00:00Z",
+        )
+
+        response, status = self.flask_app.routes["/api/batches/<batch_id>/start"]("empty")
+
+        self.assertEqual(status, 400)
+        self.assertEqual(response["error"], "Batch has no queued jobs")
+
+    def test_batch_start_continues_after_job_failure(self):
+        app = self.app_module
+        original_thread = app.threading.Thread
+        original_worker = app._run_colorization_job
+        original_output_folder = app.Config.OUTPUT_FOLDER
+        order = []
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            app.Config.OUTPUT_FOLDER = os.path.join(temp_dir, "output")
+            app.jobs["job-1"] = make_job("job-1", "first.pdf")
+            app.jobs["job-2"] = make_job("job-2", "second.pdf")
+            app.jobs["job-3"] = make_job("job-3", "third.pdf")
+            app.batches["batch-1"] = create_batch("batch-1", ["job-1", "job-2", "job-3"])
+            app.threading.Thread = ImmediateThread
+
+            def worker(job_id, job, event_queue, out_dir):
+                order.append(job_id)
+                return job_id != "job-2"
+
+            app._run_colorization_job = worker
+
+            try:
+                response = self.flask_app.routes["/api/batches/<batch_id>/start"]("batch-1")
+            finally:
+                app.threading.Thread = original_thread
+                app._run_colorization_job = original_worker
+                app.Config.OUTPUT_FOLDER = original_output_folder
+
+        self.assertEqual(response["ok"], True)
+        self.assertEqual(order, ["job-1", "job-2", "job-3"])
+        self.assertEqual(app.batches["batch-1"].status, STATUS_FAILED)
+        self.assertEqual(app.batches["batch-1"].job_statuses["job-1"], STATUS_COMPLETED)
+        self.assertEqual(app.batches["batch-1"].job_statuses["job-2"], STATUS_FAILED)
+        self.assertEqual(app.batches["batch-1"].job_statuses["job-3"], STATUS_COMPLETED)
 
 
 if __name__ == "__main__":
