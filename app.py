@@ -241,6 +241,55 @@ def _recent_job_payload(entry: JobHistoryEntry) -> dict:
     return payload
 
 
+def _batch_counts_payload(counts) -> dict:
+    return {
+        "queued": counts.queued,
+        "running": counts.running,
+        "completed": counts.completed,
+        "failed": counts.failed,
+        "cancelled": counts.cancelled,
+        "total": counts.total,
+    }
+
+
+def _batch_job_payload(batch, job_id: str) -> dict:
+    job = jobs.get(job_id)
+    status = batch.job_statuses[job_id]
+    original_filename = os.path.basename(getattr(job, "pdf_path", "")) if job else ""
+    output_pdf = _download_pdf_path(job_id) if status == "completed" else None
+    output_pdf_safe = bool(output_pdf and _is_runtime_output_path(output_pdf))
+    output_pdf_exists = bool(output_pdf_safe and os.path.isfile(output_pdf))
+
+    payload = {
+        "job_id": job_id,
+        "original_filename": original_filename or "Unknown PDF",
+        "mode": getattr(job, "mode", "auto") if job else "auto",
+        "status": status,
+        "output_pdf_exists": output_pdf_exists,
+        "output_pdf_safe": output_pdf_safe,
+    }
+    if job and isinstance(getattr(job, "page_count", None), int):
+        payload["page_count"] = job.page_count
+    error = getattr(job, "error", None) if job else None
+    if error:
+        payload["error"] = error
+    if output_pdf_exists:
+        payload["download_url"] = f"/api/download/{job_id}"
+    return payload
+
+
+def _batch_payload(batch) -> dict:
+    return {
+        "batch_id": batch.batch_id,
+        "status": batch.status,
+        "counts": _batch_counts_payload(batch.counts),
+        "created_at": batch.created_at,
+        "started_at": batch.started_at,
+        "completed_at": batch.completed_at,
+        "jobs": [_batch_job_payload(batch, job_id) for job_id in batch.job_ids],
+    }
+
+
 def _configure_torch_runtime():
     """Enable Torch runtime tuning without loading any model weights."""
     global _torch_runtime_configured
@@ -652,6 +701,13 @@ def create_app():
             "jobs": accepted_jobs,
             "errors": errors,
         })
+
+    @app.route("/api/batches/<batch_id>")
+    def batch_status(batch_id):
+        batch = batches.get(batch_id)
+        if not batch:
+            return jsonify({"error": "Batch not found"}), 404
+        return jsonify(_batch_payload(batch))
 
     @app.route("/pages/<job_id>/<int:page_num>")
     def serve_page(job_id, page_num):
