@@ -62,13 +62,17 @@ def install_fake_flask():
     return fake_flask
 
 
-def install_fake_pdf_handler(failing_names=()):
+def install_fake_pdf_handler(failing_names=(), zero_page_names=()):
     fake_pdf_handler = types.ModuleType("core.pdf_handler")
     failing_names = set(failing_names)
+    zero_page_names = set(zero_page_names)
 
     def get_page_count(pdf_path):
-        if os.path.basename(pdf_path) in failing_names:
+        basename = os.path.basename(pdf_path)
+        if basename in failing_names:
             raise ValueError("invalid PDF")
+        if basename in zero_page_names:
+            return 0
         return 2
 
     def extract_pages(pdf_path, pages_dir, dpi):
@@ -110,10 +114,12 @@ class BatchUploadRouteTests(unittest.TestCase):
     def test_batch_upload_accepts_valid_auto_pdfs_and_reports_invalid_files(self):
         app = self.app_module
         original_upload_folder = app.Config.UPLOAD_FOLDER
+        original_output_folder = app.Config.OUTPUT_FOLDER
         original_uuid4 = self.set_uuid_values("batch-abc123", "job-0000001", "job-0000002")
 
         with tempfile.TemporaryDirectory() as temp_dir:
             app.Config.UPLOAD_FOLDER = os.path.join(temp_dir, "uploads")
+            app.Config.OUTPUT_FOLDER = os.path.join(temp_dir, "output")
             self.fake_flask.request.files = FakeFiles([
                 FakeUpload("First.pdf"),
                 FakeUpload("notes.txt"),
@@ -125,6 +131,7 @@ class BatchUploadRouteTests(unittest.TestCase):
                 response = self.flask_app.routes["/api/batches"]()
             finally:
                 app.Config.UPLOAD_FOLDER = original_upload_folder
+                app.Config.OUTPUT_FOLDER = original_output_folder
                 app.uuid.uuid4 = original_uuid4
 
         self.assertEqual(response["batch_id"], "batch-abc123")
@@ -146,11 +153,13 @@ class BatchUploadRouteTests(unittest.TestCase):
     def test_batch_upload_continues_after_pdf_preparation_error(self):
         app = self.app_module
         original_upload_folder = app.Config.UPLOAD_FOLDER
+        original_output_folder = app.Config.OUTPUT_FOLDER
         original_uuid4 = self.set_uuid_values("batch-abc123", "job-bad0000", "job-good000")
         install_fake_pdf_handler(failing_names={"bad.pdf"})
 
         with tempfile.TemporaryDirectory() as temp_dir:
             app.Config.UPLOAD_FOLDER = os.path.join(temp_dir, "uploads")
+            app.Config.OUTPUT_FOLDER = os.path.join(temp_dir, "output")
             self.fake_flask.request.files = FakeFiles([
                 FakeUpload("bad.pdf"),
                 FakeUpload("good.pdf"),
@@ -161,15 +170,89 @@ class BatchUploadRouteTests(unittest.TestCase):
                 response = self.flask_app.routes["/api/batches"]()
             finally:
                 app.Config.UPLOAD_FOLDER = original_upload_folder
+                app.Config.OUTPUT_FOLDER = original_output_folder
                 app.uuid.uuid4 = original_uuid4
 
         self.assertEqual(response["batch_id"], "batch-abc123")
         self.assertEqual([job["job_id"] for job in response["jobs"]], ["job-good000"])
         self.assertEqual(response["errors"][0]["filename"], "bad.pdf")
-        self.assertEqual(response["errors"][0]["code"], "upload_failed")
+        self.assertEqual(response["errors"][0]["code"], "pdf_unreadable")
         self.assertIn("job-good000", app.jobs)
         self.assertNotIn("job-bad0000", app.jobs)
         self.assertEqual(app.batches["batch-abc123"].job_ids, ("job-good000",))
+
+    def test_batch_upload_rejects_zero_page_pdf_before_job_creation(self):
+        app = self.app_module
+        original_upload_folder = app.Config.UPLOAD_FOLDER
+        original_output_folder = app.Config.OUTPUT_FOLDER
+        original_uuid4 = self.set_uuid_values("batch-abc123", "job-empty00", "job-good000")
+        install_fake_pdf_handler(zero_page_names={"empty.pdf"})
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            app.Config.UPLOAD_FOLDER = os.path.join(temp_dir, "uploads")
+            app.Config.OUTPUT_FOLDER = os.path.join(temp_dir, "output")
+            self.fake_flask.request.files = FakeFiles([
+                FakeUpload("empty.pdf"),
+                FakeUpload("good.pdf"),
+            ])
+            self.fake_flask.request.form = {"mode": "auto"}
+
+            try:
+                response = self.flask_app.routes["/api/batches"]()
+            finally:
+                app.Config.UPLOAD_FOLDER = original_upload_folder
+                app.Config.OUTPUT_FOLDER = original_output_folder
+                app.uuid.uuid4 = original_uuid4
+
+        self.assertEqual(response["batch_id"], "batch-abc123")
+        self.assertEqual([job["job_id"] for job in response["jobs"]], ["job-good000"])
+        self.assertEqual(response["errors"][0]["filename"], "empty.pdf")
+        self.assertEqual(response["errors"][0]["code"], "pdf_has_no_pages")
+        self.assertEqual(response["errors"][0]["message"], "Choose a PDF with at least one page.")
+        self.assertNotIn("job-empty00", app.jobs)
+
+    def test_batch_upload_reports_unwritable_output_preflight_error(self):
+        app = self.app_module
+        original_upload_folder = app.Config.UPLOAD_FOLDER
+        original_preflight = app.validate_colorize_preflight
+        original_uuid4 = self.set_uuid_values("batch-abc123", "job-bad0000")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            app.Config.UPLOAD_FOLDER = os.path.join(temp_dir, "uploads")
+            self.fake_flask.request.files = FakeFiles([FakeUpload("input.pdf")])
+            self.fake_flask.request.form = {"mode": "auto"}
+
+            def fail_output_preflight(pdf_path, job_id, output_folder, mode):
+                return types.SimpleNamespace(
+                    ok=False,
+                    errors=(
+                        types.SimpleNamespace(
+                            code="output_not_writable",
+                            message="ColorComic cannot write to the output folder.",
+                            step="output preflight",
+                        ),
+                    ),
+                    output_dir=os.path.join(output_folder, job_id),
+                    page_count=2,
+                )
+
+            app.validate_colorize_preflight = fail_output_preflight
+
+            try:
+                response, status = self.flask_app.routes["/api/batches"]()
+            finally:
+                app.Config.UPLOAD_FOLDER = original_upload_folder
+                app.validate_colorize_preflight = original_preflight
+                app.uuid.uuid4 = original_uuid4
+
+        self.assertEqual(status, 400)
+        self.assertIsNone(response["batch_id"])
+        self.assertEqual(response["jobs"], [])
+        self.assertEqual(response["errors"][0]["filename"], "input.pdf")
+        self.assertEqual(response["errors"][0]["code"], "output_not_writable")
+        self.assertEqual(response["errors"][0]["step"], "output preflight")
+        self.assertEqual(app.jobs, {})
+        self.assertEqual(app.batches, {})
 
     def test_batch_upload_rejects_reference_mode_without_creating_batch(self):
         app = self.app_module
@@ -186,10 +269,12 @@ class BatchUploadRouteTests(unittest.TestCase):
     def test_batch_upload_returns_errors_when_no_valid_pdfs_are_accepted(self):
         app = self.app_module
         original_upload_folder = app.Config.UPLOAD_FOLDER
+        original_output_folder = app.Config.OUTPUT_FOLDER
         original_uuid4 = self.set_uuid_values("batch-abc123")
 
         with tempfile.TemporaryDirectory() as temp_dir:
             app.Config.UPLOAD_FOLDER = os.path.join(temp_dir, "uploads")
+            app.Config.OUTPUT_FOLDER = os.path.join(temp_dir, "output")
             self.fake_flask.request.files = FakeFiles([FakeUpload("notes.txt")])
             self.fake_flask.request.form = {"mode": "auto"}
 
@@ -197,6 +282,7 @@ class BatchUploadRouteTests(unittest.TestCase):
                 response, status = self.flask_app.routes["/api/batches"]()
             finally:
                 app.Config.UPLOAD_FOLDER = original_upload_folder
+                app.Config.OUTPUT_FOLDER = original_output_folder
                 app.uuid.uuid4 = original_uuid4
 
         self.assertEqual(status, 400)

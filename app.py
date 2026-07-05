@@ -593,7 +593,25 @@ def create_app():
 
             try:
                 uploaded_file.save(pdf_path)
-                page_count = get_page_count(pdf_path)
+                preflight = validate_colorize_preflight(
+                    pdf_path,
+                    job_id,
+                    Config.OUTPUT_FOLDER,
+                    mode="auto",
+                )
+                if not preflight.ok:
+                    for error in preflight.errors:
+                        errors.append({
+                            "filename": filename,
+                            "code": error.code,
+                            "message": error.message,
+                            "step": error.step,
+                        })
+                    continue
+
+                page_count = preflight.page_count
+                if not isinstance(page_count, int):
+                    page_count = get_page_count(pdf_path)
                 pages_dir = os.path.join(job_dir, "pages")
                 page_images = extract_pages(pdf_path, pages_dir, dpi=Config.PAGE_DPI)
             except Exception as exc:
