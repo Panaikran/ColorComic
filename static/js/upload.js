@@ -335,9 +335,17 @@ const batchAcceptedBlock = document.getElementById('batchAcceptedBlock');
 const batchAcceptedList = document.getElementById('batchAcceptedList');
 const batchErrorsBlock = document.getElementById('batchErrorsBlock');
 const batchErrorList = document.getElementById('batchErrorList');
+const startBatchBtn = document.getElementById('startBatchBtn');
+const batchStatusText = document.getElementById('batchStatusText');
+const batchCounts = document.getElementById('batchCounts');
+const terminalBatchStatuses = new Set(['completed', 'failed', 'cancelled']);
+let currentBatchId = null;
+let batchPollTimer = null;
 
 function hideBatchResult() {
     if (batchResult) batchResult.style.display = 'none';
+    stopBatchPolling();
+    currentBatchId = null;
 }
 
 function appendBatchListItem(list, primary, secondary) {
@@ -354,14 +362,104 @@ function appendBatchListItem(list, primary, secondary) {
     list.appendChild(item);
 }
 
+function formatStatus(status) {
+    if (!status) return 'Unknown';
+    return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+function renderBatchCounts(counts) {
+    if (!batchCounts || !counts) return;
+
+    batchCounts.replaceChildren();
+    ['queued', 'running', 'completed', 'failed', 'cancelled'].forEach(status => {
+        const item = document.createElement('span');
+        item.className = `status batch-status-${status}`;
+        item.textContent = `${formatStatus(status)}: ${counts[status] || 0}`;
+        batchCounts.appendChild(item);
+    });
+    batchCounts.style.display = 'flex';
+}
+
+function renderBatchJobs(jobs) {
+    batchAcceptedList.replaceChildren();
+    jobs.forEach(job => {
+        const details = [];
+        details.push(formatStatus(job.status));
+        if (Number.isInteger(job.page_count)) {
+            details.push(`${job.page_count} page${job.page_count === 1 ? '' : 's'}`);
+        }
+        if (job.error) details.push(job.error);
+        appendBatchListItem(batchAcceptedList, job.original_filename || job.filename || job.job_id, details.join(' - '));
+    });
+    batchAcceptedBlock.style.display = jobs.length ? 'block' : 'none';
+}
+
+function stopBatchPolling() {
+    if (!batchPollTimer) return;
+    clearInterval(batchPollTimer);
+    batchPollTimer = null;
+}
+
+async function pollBatchStatus(batchId) {
+    const response = await fetch(`/api/batches/${encodeURIComponent(batchId)}`);
+    const data = await response.json();
+    if (!response.ok) {
+        throw new Error(data && data.error ? data.error : 'Could not load batch status.');
+    }
+
+    renderBatchStatus(data);
+    if (terminalBatchStatuses.has(data.status)) {
+        stopBatchPolling();
+    }
+}
+
+function startBatchPolling(batchId) {
+    stopBatchPolling();
+    pollBatchStatus(batchId).catch(error => {
+        batchStatusText.textContent = error.message;
+        stopBatchPolling();
+    });
+    batchPollTimer = setInterval(() => {
+        pollBatchStatus(batchId).catch(error => {
+            batchStatusText.textContent = error.message;
+            stopBatchPolling();
+        });
+    }, 2000);
+}
+
+function renderBatchStatus(data) {
+    if (!data) return;
+
+    currentBatchId = data.batch_id || currentBatchId;
+    batchIdText.textContent = currentBatchId ? `Batch ID: ${currentBatchId}` : 'No batch was created.';
+    batchStatusText.textContent = `Batch status: ${formatStatus(data.status)}`;
+    renderBatchCounts(data.counts);
+    renderBatchJobs(Array.isArray(data.jobs) ? data.jobs : []);
+    if (startBatchBtn) {
+        startBatchBtn.style.display = terminalBatchStatuses.has(data.status) || data.status === 'running'
+            ? 'none'
+            : '';
+        startBatchBtn.disabled = data.status !== 'queued';
+    }
+}
+
 function renderBatchResult(data) {
     if (!batchResult) return;
 
     const jobs = Array.isArray(data.jobs) ? data.jobs : [];
     const errors = Array.isArray(data.errors) ? data.errors : [];
+    currentBatchId = data.batch_id || null;
     batchIdText.textContent = data.batch_id ? `Batch ID: ${data.batch_id}` : 'No batch was created.';
+    batchStatusText.textContent = data.batch_id
+        ? 'Processing has not started yet.'
+        : 'No batch is ready to start.';
     batchAcceptedList.replaceChildren();
     batchErrorList.replaceChildren();
+    if (batchCounts) batchCounts.style.display = 'none';
+    if (startBatchBtn) {
+        startBatchBtn.style.display = data.batch_id ? '' : 'none';
+        startBatchBtn.disabled = !data.batch_id;
+    }
 
     jobs.forEach(job => {
         const pageText = Number.isInteger(job.page_count)
@@ -380,6 +478,30 @@ function renderBatchResult(data) {
     batchAcceptedBlock.style.display = jobs.length ? 'block' : 'none';
     batchErrorsBlock.style.display = errors.length ? 'block' : 'none';
     batchResult.style.display = 'block';
+}
+
+async function startCurrentBatch() {
+    if (!currentBatchId || !startBatchBtn) return;
+
+    startBatchBtn.disabled = true;
+    batchStatusText.textContent = 'Starting batch...';
+    try {
+        const response = await fetch(`/api/batches/${encodeURIComponent(currentBatchId)}/start`, { method: 'POST' });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data && data.error ? data.error : 'Could not start batch.');
+        }
+        startBatchBtn.style.display = 'none';
+        batchStatusText.textContent = 'Batch started. Checking progress...';
+        startBatchPolling(currentBatchId);
+    } catch (error) {
+        batchStatusText.textContent = error && error.message ? error.message : 'Could not start batch.';
+        startBatchBtn.disabled = false;
+    }
+}
+
+if (startBatchBtn) {
+    startBatchBtn.addEventListener('click', startCurrentBatch);
 }
 
 async function createBatchUpload() {

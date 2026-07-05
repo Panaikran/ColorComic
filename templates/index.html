@@ -139,7 +139,12 @@
                     <h3>Batch Created</h3>
                     <p class="text-dim" id="batchIdText"></p>
                 </div>
+                <button type="button" class="btn btn-primary btn-sm" id="startBatchBtn" style="display:none;">
+                    Start Batch
+                </button>
             </div>
+            <p class="text-dim" id="batchStatusText">Processing has not started yet.</p>
+            <div class="batch-counts" id="batchCounts" style="display:none;"></div>
             <div id="batchAcceptedBlock" style="display:none;">
                 <h4>Accepted PDFs</h4>
                 <ul id="batchAcceptedList"></ul>
@@ -148,7 +153,6 @@
                 <h4>Files That Need Attention</h4>
                 <ul id="batchErrorList"></ul>
             </div>
-            <p class="text-dim">Processing has not started yet.</p>
         </section>
     </div>
 

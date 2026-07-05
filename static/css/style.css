@@ -631,6 +631,10 @@ input:focus, select:focus, textarea:focus {
 }
 
 .batch-result-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+    align-items: flex-start;
     margin-bottom: 0.75rem;
 }
 
@@ -652,6 +656,19 @@ input:focus, select:focus, textarea:focus {
     margin: 0.25rem 0;
     overflow-wrap: anywhere;
 }
+
+.batch-counts {
+    display: flex;
+    gap: 0.4rem;
+    flex-wrap: wrap;
+    margin-top: 0.75rem;
+}
+
+.batch-status-queued { background: rgba(148, 163, 184, 0.2); color: var(--text-dim); }
+.batch-status-running { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
+.batch-status-completed { background: rgba(62, 207, 142, 0.2); color: var(--success); }
+.batch-status-failed { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
+.batch-status-cancelled { background: rgba(148, 163, 184, 0.2); color: var(--text-dim); }
 
 .recent-outputs-header {
     display: flex;

@@ -11,11 +11,14 @@ class BatchUploadUiTests(unittest.TestCase):
         self.assertIn('id="fileInput" accept=".pdf" multiple', template)
         self.assertIn('id="batchResult"', template)
         self.assertIn('id="batchIdText"', template)
+        self.assertIn('id="startBatchBtn"', template)
+        self.assertIn('id="batchStatusText"', template)
+        self.assertIn('id="batchCounts"', template)
         self.assertIn('id="batchAcceptedList"', template)
         self.assertIn('id="batchErrorList"', template)
         self.assertIn("Processing has not started yet.", template)
 
-    def test_upload_script_creates_batch_for_multiple_pdfs_without_starting_it(self):
+    def test_upload_script_creates_batch_for_multiple_pdfs_and_waits_for_user_start(self):
         root = os.getcwd()
         with open(os.path.join(root, "static", "js", "upload.js"), encoding="utf-8") as handle:
             script = handle.read()
@@ -26,8 +29,36 @@ class BatchUploadUiTests(unittest.TestCase):
         self.assertIn("fetch('/api/batches', { method: 'POST', body: formData })", script)
         self.assertIn("renderBatchResult(data)", script)
         self.assertIn("Batch created. Processing has not started yet.", script)
-        self.assertNotIn("/api/batches/${", script)
-        self.assertNotIn("/start", script)
+        self.assertIn("startBatchBtn.style.display = data.batch_id ? '' : 'none'", script)
+        self.assertIn("startBatchBtn.addEventListener('click', startCurrentBatch)", script)
+
+    def test_upload_script_starts_batch_and_polls_status(self):
+        root = os.getcwd()
+        with open(os.path.join(root, "static", "js", "upload.js"), encoding="utf-8") as handle:
+            script = handle.read()
+
+        self.assertIn("async function startCurrentBatch()", script)
+        self.assertIn("fetch(`/api/batches/${encodeURIComponent(currentBatchId)}/start`, { method: 'POST' })", script)
+        self.assertIn("startBatchPolling(currentBatchId)", script)
+        self.assertIn("fetch(`/api/batches/${encodeURIComponent(batchId)}`)", script)
+        self.assertIn("setInterval(() =>", script)
+        self.assertIn("terminalBatchStatuses.has(data.status)", script)
+        self.assertIn("clearInterval(batchPollTimer)", script)
+
+    def test_upload_script_renders_batch_counts_statuses_and_errors_without_output_actions(self):
+        root = os.getcwd()
+        with open(os.path.join(root, "static", "js", "upload.js"), encoding="utf-8") as handle:
+            script = handle.read()
+
+        self.assertIn("function renderBatchStatus(data)", script)
+        self.assertIn("function renderBatchCounts(counts)", script)
+        self.assertIn("function renderBatchJobs(jobs)", script)
+        self.assertIn("'queued', 'running', 'completed', 'failed', 'cancelled'", script)
+        self.assertIn("if (job.error) details.push(job.error)", script)
+        batch_section = script.split("const batchResult = document.getElementById('batchResult');", 1)[1].split("// Recent outputs", 1)[0]
+        self.assertNotIn("Download", batch_section)
+        self.assertNotIn("Open Folder", batch_section)
+        self.assertNotIn("Show PDF", batch_section)
 
     def test_upload_script_preserves_single_pdf_colorization_flow(self):
         root = os.getcwd()
