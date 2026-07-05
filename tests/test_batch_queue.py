@@ -172,6 +172,35 @@ class BatchQueueTests(unittest.TestCase):
         self.assertEqual(result.failed_job_ids, ())
         self.assertEqual(result.batch, batch)
 
+    def test_single_worker_preserves_external_queued_cancellation(self):
+        current_batch = create_batch("batch-1", ["job-1", "job-2"])
+        seen = []
+
+        def store_update(batch):
+            nonlocal current_batch
+            current_batch = batch
+
+        def get_latest(batch_id):
+            return current_batch if batch_id == current_batch.batch_id else None
+
+        runner = SingleWorkerBatchRunner(on_update=store_update, get_latest=get_latest)
+
+        def process(job_id):
+            nonlocal current_batch
+            seen.append(job_id)
+            if job_id == "job-1":
+                current_batch = transition_job(current_batch, "job-2", STATUS_CANCELLED)
+            return True
+
+        result = runner.start(current_batch, process)
+
+        self.assertEqual(seen, ["job-1"])
+        self.assertEqual(result.batch.job_statuses["job-1"], STATUS_COMPLETED)
+        self.assertEqual(result.batch.job_statuses["job-2"], STATUS_CANCELLED)
+        self.assertEqual(result.batch.counts.completed, 1)
+        self.assertEqual(result.batch.counts.cancelled, 1)
+        self.assertEqual(result.batch.status, STATUS_COMPLETED)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -17,10 +17,13 @@ from datetime import datetime, timezone
 from config import Config
 from core.batch_queue import (
     BatchQueueError,
+    STATUS_CANCELLED,
+    STATUS_COMPLETED,
     STATUS_QUEUED,
     STATUS_RUNNING,
     SingleWorkerBatchRunner,
     create_batch,
+    transition_job,
 )
 from core.job_history import JobHistoryEntry, append_job_history, load_job_history
 from core.preflight import validate_colorize_preflight
@@ -301,6 +304,11 @@ def _batch_payload(batch) -> dict:
 def _store_batch_update(batch) -> None:
     with _batch_lock:
         batches[batch.batch_id] = batch
+
+
+def _get_batch(batch_id: str):
+    with _batch_lock:
+        return batches.get(batch_id)
 
 
 def _run_batch(batch_id: str, runner: SingleWorkerBatchRunner) -> None:
@@ -765,7 +773,7 @@ def create_app():
             if batch.counts.queued == 0:
                 return jsonify({"error": "Batch has no queued jobs"}), 400
 
-            runner = SingleWorkerBatchRunner(on_update=_store_batch_update)
+            runner = SingleWorkerBatchRunner(on_update=_store_batch_update, get_latest=_get_batch)
             active_batch_runners[batch_id] = runner
 
         try:
@@ -781,6 +789,39 @@ def create_app():
             return jsonify({"error": f"Could not start batch: {exc}"}), 500
 
         return jsonify({"ok": True, "batch_id": batch_id, "status": "started"})
+
+    @app.route("/api/batches/<batch_id>/jobs/<job_id>/cancel", methods=["POST"])
+    def cancel_batch_job(batch_id, job_id):
+        with _batch_lock:
+            batch = batches.get(batch_id)
+            if not batch:
+                return jsonify({"error": "Batch not found"}), 404
+            if job_id not in batch.job_statuses:
+                return jsonify({"error": "Job not found"}), 404
+
+            status = batch.job_statuses[job_id]
+            if status == STATUS_RUNNING:
+                return jsonify({"error": "Job is already running"}), 409
+            if status == STATUS_COMPLETED:
+                return jsonify({"error": "Job is already completed"}), 409
+            if status == STATUS_CANCELLED:
+                return jsonify({"error": "Job is already cancelled"}), 409
+            if status != STATUS_QUEUED:
+                return jsonify({"error": f"Job cannot be cancelled from status: {status}"}), 409
+
+            try:
+                batch = transition_job(batch, job_id, STATUS_CANCELLED)
+            except BatchQueueError as exc:
+                return jsonify({"error": str(exc)}), 409
+            batches[batch_id] = batch
+
+        return jsonify({
+            "ok": True,
+            "batch_id": batch_id,
+            "job_id": job_id,
+            "status": STATUS_CANCELLED,
+            "batch": _batch_payload(batch),
+        })
 
     @app.route("/pages/<job_id>/<int:page_num>")
     def serve_page(job_id, page_num):

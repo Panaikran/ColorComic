@@ -7,6 +7,7 @@ import unittest
 
 from core.batch_queue import (
     BatchRecord,
+    STATUS_CANCELLED,
     STATUS_COMPLETED,
     STATUS_FAILED,
     STATUS_QUEUED,
@@ -272,6 +273,75 @@ class QueueApiTests(unittest.TestCase):
         self.assertEqual(app.batches["batch-1"].job_statuses["job-1"], STATUS_COMPLETED)
         self.assertEqual(app.batches["batch-1"].job_statuses["job-2"], STATUS_FAILED)
         self.assertEqual(app.batches["batch-1"].job_statuses["job-3"], STATUS_COMPLETED)
+
+    def test_cancel_queued_batch_job_updates_counts(self):
+        app = self.app_module
+        app.jobs["job-1"] = make_job("job-1", "first.pdf")
+        app.jobs["job-2"] = make_job("job-2", "second.pdf")
+        app.batches["batch-1"] = create_batch("batch-1", ["job-1", "job-2"])
+
+        response = self.flask_app.routes["/api/batches/<batch_id>/jobs/<job_id>/cancel"]("batch-1", "job-2")
+
+        self.assertEqual(response["ok"], True)
+        self.assertEqual(response["batch_id"], "batch-1")
+        self.assertEqual(response["job_id"], "job-2")
+        self.assertEqual(response["status"], STATUS_CANCELLED)
+        self.assertEqual(app.batches["batch-1"].job_statuses["job-2"], STATUS_CANCELLED)
+        self.assertEqual(app.batches["batch-1"].counts.queued, 1)
+        self.assertEqual(app.batches["batch-1"].counts.cancelled, 1)
+        self.assertIn("job-2", app.jobs)
+
+    def test_cancel_rejects_running_batch_job(self):
+        app = self.app_module
+        app.jobs["job-1"] = make_job("job-1", "first.pdf")
+        batch = create_batch("batch-1", ["job-1"])
+        app.batches["batch-1"] = transition_job(batch, "job-1", STATUS_RUNNING)
+
+        response, status = self.flask_app.routes["/api/batches/<batch_id>/jobs/<job_id>/cancel"]("batch-1", "job-1")
+
+        self.assertEqual(status, 409)
+        self.assertEqual(response["error"], "Job is already running")
+        self.assertEqual(app.batches["batch-1"].job_statuses["job-1"], STATUS_RUNNING)
+
+    def test_cancel_rejects_completed_batch_job(self):
+        app = self.app_module
+        app.jobs["job-1"] = make_job("job-1", "first.pdf")
+        batch = create_batch("batch-1", ["job-1"])
+        batch = transition_job(batch, "job-1", STATUS_RUNNING)
+        app.batches["batch-1"] = transition_job(batch, "job-1", STATUS_COMPLETED)
+
+        response, status = self.flask_app.routes["/api/batches/<batch_id>/jobs/<job_id>/cancel"]("batch-1", "job-1")
+
+        self.assertEqual(status, 409)
+        self.assertEqual(response["error"], "Job is already completed")
+        self.assertEqual(app.batches["batch-1"].job_statuses["job-1"], STATUS_COMPLETED)
+
+    def test_cancel_rejects_already_cancelled_batch_job(self):
+        app = self.app_module
+        app.jobs["job-1"] = make_job("job-1", "first.pdf")
+        batch = create_batch("batch-1", ["job-1"])
+        app.batches["batch-1"] = transition_job(batch, "job-1", STATUS_CANCELLED)
+
+        response, status = self.flask_app.routes["/api/batches/<batch_id>/jobs/<job_id>/cancel"]("batch-1", "job-1")
+
+        self.assertEqual(status, 409)
+        self.assertEqual(response["error"], "Job is already cancelled")
+        self.assertEqual(app.batches["batch-1"].job_statuses["job-1"], STATUS_CANCELLED)
+
+    def test_cancel_missing_batch_returns_404(self):
+        response, status = self.flask_app.routes["/api/batches/<batch_id>/jobs/<job_id>/cancel"]("missing", "job-1")
+
+        self.assertEqual(status, 404)
+        self.assertEqual(response["error"], "Batch not found")
+
+    def test_cancel_missing_job_returns_404(self):
+        app = self.app_module
+        app.batches["batch-1"] = create_batch("batch-1", ["job-1"])
+
+        response, status = self.flask_app.routes["/api/batches/<batch_id>/jobs/<job_id>/cancel"]("batch-1", "missing")
+
+        self.assertEqual(status, 404)
+        self.assertEqual(response["error"], "Job not found")
 
 
 if __name__ == "__main__":

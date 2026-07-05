@@ -45,6 +45,7 @@ class BatchQueueError(ValueError):
 
 ProcessingCallback = Callable[[str], object]
 BatchUpdateCallback = Callable[["BatchRecord"], None]
+BatchLookupCallback = Callable[[str], "BatchRecord | None"]
 
 
 def utc_now_iso() -> str:
@@ -198,14 +199,24 @@ def next_queued_job_id(batch: BatchRecord) -> str | None:
 class SingleWorkerBatchRunner:
     """Run queued batch jobs sequentially with an injected processing callback."""
 
-    def __init__(self, on_update: BatchUpdateCallback | None = None):
+    def __init__(
+        self,
+        on_update: BatchUpdateCallback | None = None,
+        get_latest: BatchLookupCallback | None = None,
+    ):
         self._started_batch_ids: set[str] = set()
         self.active_job_id: str | None = None
         self._on_update = on_update
+        self._get_latest = get_latest
 
     def _emit_update(self, batch: BatchRecord) -> None:
         if self._on_update:
             self._on_update(batch)
+
+    def _refresh(self, batch: BatchRecord) -> BatchRecord:
+        if not self._get_latest:
+            return batch
+        return self._get_latest(batch.batch_id) or batch
 
     def start(self, batch: BatchRecord, process_job: ProcessingCallback) -> BatchRunResult:
         if batch.batch_id in self._started_batch_ids or batch.started_at is not None:
@@ -222,6 +233,7 @@ class SingleWorkerBatchRunner:
         current_batch = batch
 
         while not current_batch.is_terminal:
+            current_batch = self._refresh(current_batch)
             job_id = next_queued_job_id(current_batch)
             if job_id is None:
                 break
@@ -234,9 +246,11 @@ class SingleWorkerBatchRunner:
                 result = process_job(job_id)
             except Exception:
                 failed_job_ids.append(job_id)
+                current_batch = self._refresh(current_batch)
                 current_batch = transition_job(current_batch, job_id, STATUS_FAILED)
                 self._emit_update(current_batch)
             else:
+                current_batch = self._refresh(current_batch)
                 if result is False:
                     failed_job_ids.append(job_id)
                     current_batch = transition_job(current_batch, job_id, STATUS_FAILED)
