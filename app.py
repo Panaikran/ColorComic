@@ -15,6 +15,7 @@ import uuid
 from datetime import datetime, timezone
 
 from config import Config
+from core.batch_queue import create_batch
 from core.job_history import JobHistoryEntry, append_job_history, load_job_history
 from core.preflight import validate_colorize_preflight
 from core.preferences import load_preferences, save_preferences
@@ -22,6 +23,7 @@ from core.preferences import load_preferences, save_preferences
 
 jobs = {}
 job_queues = {}
+batches = {}
 logger = logging.getLogger(__name__)
 
 _model_manager = None
@@ -170,6 +172,15 @@ def _download_pdf_name(job_id: str) -> str:
         if safe_stem:
             return f"{safe_stem}-colorized.pdf"
     return "colorized.pdf"
+
+
+def _safe_uploaded_pdf_name(filename: str, fallback_stem: str) -> str:
+    original_name = os.path.basename(filename or "")
+    original_stem, extension = os.path.splitext(original_name)
+    safe_stem = _sanitize_windows_filename_stem(original_stem) or fallback_stem
+    if extension.lower() != ".pdf":
+        extension = ".pdf"
+    return f"{safe_stem}{extension.lower()}"
 
 
 def _utc_now_iso() -> str:
@@ -537,6 +548,92 @@ def create_app():
         jobs[job_id] = job
 
         return jsonify({"job_id": job_id, "page_count": page_count})
+
+    @app.route("/api/batches", methods=["POST"])
+    def create_batch_upload():
+        from core.pdf_handler import extract_pages, get_page_count
+        from models.schemas import JobState
+
+        mode = request.form.get("mode", "auto")
+        if mode != "auto":
+            return jsonify({"error": "Batch uploads support Auto mode only"}), 400
+
+        files = []
+        if hasattr(request.files, "getlist"):
+            files = request.files.getlist("files") or request.files.getlist("file")
+
+        if not files:
+            return jsonify({"error": "No files uploaded", "jobs": [], "errors": []}), 400
+
+        batch_id = str(uuid.uuid4())[:12]
+        batch_dir = os.path.join(Config.UPLOAD_FOLDER, batch_id)
+        os.makedirs(batch_dir, exist_ok=True)
+
+        style = request.form.get("style", "auto")
+        device = request.form.get("device", "auto")
+        accepted_jobs = []
+        errors = []
+
+        for index, uploaded_file in enumerate(files):
+            filename = getattr(uploaded_file, "filename", "") or f"file-{index + 1}"
+            if not filename.lower().endswith(".pdf"):
+                errors.append({
+                    "filename": filename,
+                    "code": "not_pdf",
+                    "message": "Only PDF files are accepted.",
+                })
+                continue
+
+            job_id = str(uuid.uuid4())[:12]
+            job_dir = os.path.join(batch_dir, job_id)
+            os.makedirs(job_dir, exist_ok=True)
+
+            safe_name = _safe_uploaded_pdf_name(filename, f"input-{index + 1}")
+            pdf_path = os.path.join(job_dir, safe_name)
+
+            try:
+                uploaded_file.save(pdf_path)
+                page_count = get_page_count(pdf_path)
+                pages_dir = os.path.join(job_dir, "pages")
+                page_images = extract_pages(pdf_path, pages_dir, dpi=Config.PAGE_DPI)
+            except Exception as exc:
+                logger.exception("Batch upload failed for file %s", filename)
+                errors.append({
+                    "filename": filename,
+                    "code": "upload_failed",
+                    "message": f"Could not prepare this PDF: {exc}",
+                })
+                continue
+
+            job = JobState(
+                job_id=job_id,
+                pdf_path=pdf_path,
+                page_count=page_count,
+                page_images=page_images,
+                style=style,
+                device=device,
+                mode="auto",
+                reference_image_path=None,
+            )
+            jobs[job_id] = job
+            accepted_jobs.append({
+                "job_id": job_id,
+                "filename": filename,
+                "page_count": page_count,
+                "mode": "auto",
+            })
+
+        if not accepted_jobs:
+            return jsonify({"batch_id": None, "jobs": [], "errors": errors}), 400
+
+        batch = create_batch(batch_id, [job["job_id"] for job in accepted_jobs])
+        batches[batch_id] = batch
+
+        return jsonify({
+            "batch_id": batch_id,
+            "jobs": accepted_jobs,
+            "errors": errors,
+        })
 
     @app.route("/pages/<job_id>/<int:page_num>")
     def serve_page(job_id, page_num):
