@@ -20,6 +20,7 @@ class JobHistoryEntry:
     completed_at: str
     output_pdf_path: str
     page_count: int | None = None
+    batch_id: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -31,6 +32,8 @@ class JobHistoryEntry:
         }
         if self.page_count is not None:
             payload["page_count"] = self.page_count
+        if self.batch_id:
+            payload["batch_id"] = self.batch_id
         return payload
 
     @classmethod
@@ -47,6 +50,10 @@ class JobHistoryEntry:
             if not isinstance(page_count, int) or page_count < 0:
                 return None
 
+        batch_id = payload.get("batch_id")
+        if batch_id is not None and (not isinstance(batch_id, str) or not batch_id):
+            return None
+
         return cls(
             job_id=payload["job_id"],
             original_filename=payload["original_filename"],
@@ -54,6 +61,7 @@ class JobHistoryEntry:
             completed_at=payload["completed_at"],
             output_pdf_path=payload["output_pdf_path"],
             page_count=page_count,
+            batch_id=batch_id,
         )
 
 

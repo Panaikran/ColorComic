@@ -183,6 +183,7 @@ class QueueApiTests(unittest.TestCase):
         original_worker = app._run_colorization_job
         original_output_folder = app.Config.OUTPUT_FOLDER
         order = []
+        batch_ids = []
 
         with tempfile.TemporaryDirectory() as temp_dir:
             app.Config.OUTPUT_FOLDER = os.path.join(temp_dir, "output")
@@ -190,7 +191,12 @@ class QueueApiTests(unittest.TestCase):
             app.jobs["job-2"] = make_job("job-2", "second.pdf")
             app.batches["batch-1"] = create_batch("batch-1", ["job-1", "job-2"])
             app.threading.Thread = ImmediateThread
-            app._run_colorization_job = lambda job_id, job, event_queue, out_dir: order.append(job_id) or True
+            def worker(job_id, job, event_queue, out_dir, batch_id=None):
+                order.append(job_id)
+                batch_ids.append(batch_id)
+                return True
+
+            app._run_colorization_job = worker
 
             try:
                 response = self.flask_app.routes["/api/batches/<batch_id>/start"]("batch-1")
@@ -203,6 +209,7 @@ class QueueApiTests(unittest.TestCase):
         self.assertEqual(response["batch_id"], "batch-1")
         self.assertEqual(response["status"], "started")
         self.assertEqual(order, ["job-1", "job-2"])
+        self.assertEqual(batch_ids, ["batch-1", "batch-1"])
         self.assertEqual(app.batches["batch-1"].status, STATUS_COMPLETED)
         self.assertEqual(app.batches["batch-1"].counts.completed, 2)
         self.assertEqual(app.active_batch_runners, {})
@@ -254,7 +261,7 @@ class QueueApiTests(unittest.TestCase):
             app.batches["batch-1"] = create_batch("batch-1", ["job-1", "job-2", "job-3"])
             app.threading.Thread = ImmediateThread
 
-            def worker(job_id, job, event_queue, out_dir):
+            def worker(job_id, job, event_queue, out_dir, batch_id=None):
                 order.append(job_id)
                 return job_id != "job-2"
 

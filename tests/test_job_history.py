@@ -14,7 +14,7 @@ from core.job_history import (
 
 
 class JobHistoryTests(unittest.TestCase):
-    def make_entry(self, job_id="job-1", page_count=3):
+    def make_entry(self, job_id="job-1", page_count=3, batch_id=None):
         return JobHistoryEntry(
             job_id=job_id,
             original_filename="comic.pdf",
@@ -22,6 +22,7 @@ class JobHistoryTests(unittest.TestCase):
             completed_at="2026-07-03T12:00:00Z",
             output_pdf_path=r"C:\Users\User\AppData\Local\ColorComic\output\job-1\colorized.pdf",
             page_count=page_count,
+            batch_id=batch_id,
         )
 
     def test_history_path_uses_config_dir(self):
@@ -93,6 +94,46 @@ class JobHistoryTests(unittest.TestCase):
 
         self.assertNotIn("page_count", payload[0])
         self.assertEqual(entries, [entry])
+
+    def test_batch_id_is_optional_and_omitted_when_missing(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = os.path.join(temp_dir, HISTORY_FILENAME)
+            entry = self.make_entry(batch_id=None)
+
+            save_job_history([entry], path)
+            with open(path, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+            entries = load_job_history(path)
+
+        self.assertNotIn("batch_id", payload[0])
+        self.assertIsNone(entries[0].batch_id)
+        self.assertEqual(entries, [entry])
+
+    def test_batch_id_round_trips_when_present(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = os.path.join(temp_dir, HISTORY_FILENAME)
+            entry = self.make_entry(batch_id="batch-1")
+
+            save_job_history([entry], path)
+            with open(path, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+            entries = load_job_history(path)
+
+        self.assertEqual(payload[0]["batch_id"], "batch-1")
+        self.assertEqual(entries, [entry])
+
+    def test_existing_history_without_batch_id_still_loads(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = os.path.join(temp_dir, HISTORY_FILENAME)
+            legacy_payload = self.make_entry().as_dict()
+            legacy_payload.pop("batch_id", None)
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump([legacy_payload], handle)
+
+            entries = load_job_history(path)
+
+        self.assertEqual(len(entries), 1)
+        self.assertIsNone(entries[0].batch_id)
 
 
 if __name__ == "__main__":

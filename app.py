@@ -198,7 +198,12 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _record_completed_job_history(job, output_pdf: str, history_path: str | None = None) -> bool:
+def _record_completed_job_history(
+    job,
+    output_pdf: str,
+    history_path: str | None = None,
+    batch_id: str | None = None,
+) -> bool:
     if not output_pdf or not os.path.isfile(output_pdf):
         return False
 
@@ -214,6 +219,7 @@ def _record_completed_job_history(job, output_pdf: str, history_path: str | None
         completed_at=_utc_now_iso(),
         output_pdf_path=output_pdf,
         page_count=page_count,
+        batch_id=batch_id,
     )
     try:
         append_job_history(entry, path=history_path)
@@ -249,6 +255,8 @@ def _recent_job_payload(entry: JobHistoryEntry) -> dict:
     }
     if entry.page_count is not None:
         payload["page_count"] = entry.page_count
+    if entry.batch_id:
+        payload["batch_id"] = entry.batch_id
     return payload
 
 
@@ -324,7 +332,7 @@ def _run_batch(batch_id: str, runner: SingleWorkerBatchRunner) -> None:
         out_dir = os.path.join(Config.OUTPUT_FOLDER, job_id)
         os.makedirs(out_dir, exist_ok=True)
         try:
-            return _run_colorization_job(job_id, job, q, out_dir)
+            return _run_colorization_job(job_id, job, q, out_dir, batch_id=batch_id)
         except Exception:
             logger.exception("Batch job %s failed before completion", job_id)
             raise
@@ -394,7 +402,13 @@ def get_post_processor():
     return _post_processor
 
 
-def _run_colorization_job(job_id: str, job, event_queue: queue.Queue, out_dir: str) -> bool:
+def _run_colorization_job(
+    job_id: str,
+    job,
+    event_queue: queue.Queue,
+    out_dir: str,
+    batch_id: str | None = None,
+) -> bool:
     current_step = "startup"
     try:
         import cv2
@@ -488,7 +502,7 @@ def _run_colorization_job(job_id: str, job, event_queue: queue.Queue, out_dir: s
         output_pdf = os.path.join(out_dir, "colorized.pdf")
         reassemble_pdf(colored_paths, output_pdf, job.pdf_path)
         job.output_pdf = output_pdf
-        _record_completed_job_history(job, output_pdf)
+        _record_completed_job_history(job, output_pdf, batch_id=batch_id)
         job.status = "done"
         event_queue.put({"done": True, "download_url": f"/api/download/{job_id}"})
         return True
