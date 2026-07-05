@@ -45,7 +45,7 @@ class BatchUploadUiTests(unittest.TestCase):
         self.assertIn("terminalBatchStatuses.has(data.status)", script)
         self.assertIn("clearInterval(batchPollTimer)", script)
 
-    def test_upload_script_renders_batch_counts_statuses_and_errors_without_output_actions(self):
+    def test_upload_script_renders_batch_counts_statuses_and_errors(self):
         root = os.getcwd()
         with open(os.path.join(root, "static", "js", "upload.js"), encoding="utf-8") as handle:
             script = handle.read()
@@ -55,10 +55,20 @@ class BatchUploadUiTests(unittest.TestCase):
         self.assertIn("function renderBatchJobs(jobs)", script)
         self.assertIn("'queued', 'running', 'completed', 'failed', 'cancelled'", script)
         self.assertIn("if (job.error) details.push(job.error)", script)
-        batch_section = script.split("const batchResult = document.getElementById('batchResult');", 1)[1].split("// Recent outputs", 1)[0]
-        self.assertNotIn("Download", batch_section)
-        self.assertNotIn("Open Folder", batch_section)
-        self.assertNotIn("Show PDF", batch_section)
+
+    def test_upload_script_shows_completed_batch_output_actions_only_when_safe(self):
+        root = os.getcwd()
+        with open(os.path.join(root, "static", "js", "upload.js"), encoding="utf-8") as handle:
+            script = handle.read()
+
+        batch_section = script.split("function renderBatchJobs(jobs)", 1)[1].split("function stopBatchPolling()", 1)[0]
+        self.assertIn("job.status === 'completed' && job.output_pdf_exists && job.output_pdf_safe", batch_section)
+        self.assertIn("download.href = job.download_url || `/api/download/${encodeURIComponent(job.job_id)}`", batch_section)
+        self.assertIn("download.textContent = 'Download PDF'", batch_section)
+        self.assertIn("if (canOpenOutputPdf())", batch_section)
+        self.assertIn("if (canOpenOutputFolder())", batch_section)
+        self.assertIn("openRecentOutputPdf(job.job_id, actionStatus, revealPdf)", batch_section)
+        self.assertIn("openRecentOutputFolder(job.job_id, actionStatus, openFolder)", batch_section)
 
     def test_upload_script_preserves_single_pdf_colorization_flow(self):
         root = os.getcwd()

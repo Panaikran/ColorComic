@@ -383,13 +383,62 @@ function renderBatchCounts(counts) {
 function renderBatchJobs(jobs) {
     batchAcceptedList.replaceChildren();
     jobs.forEach(job => {
+        const item = document.createElement('li');
+        const title = document.createElement('strong');
+        title.textContent = job.original_filename || job.filename || job.job_id;
+        item.appendChild(title);
+
         const details = [];
         details.push(formatStatus(job.status));
         if (Number.isInteger(job.page_count)) {
             details.push(`${job.page_count} page${job.page_count === 1 ? '' : 's'}`);
         }
         if (job.error) details.push(job.error);
-        appendBatchListItem(batchAcceptedList, job.original_filename || job.filename || job.job_id, details.join(' - '));
+        const meta = document.createElement('span');
+        meta.className = 'text-dim';
+        meta.textContent = ` - ${details.join(' - ')}`;
+        item.appendChild(meta);
+
+        if (job.status === 'completed' && job.output_pdf_exists && job.output_pdf_safe) {
+            const actionStatus = document.createElement('p');
+            actionStatus.className = 'text-dim recent-output-action-status';
+
+            const actions = document.createElement('div');
+            actions.className = 'recent-output-actions';
+
+            const download = document.createElement('a');
+            download.className = 'btn btn-primary btn-sm';
+            download.href = job.download_url || `/api/download/${encodeURIComponent(job.job_id)}`;
+            download.textContent = 'Download PDF';
+            actions.appendChild(download);
+
+            if (canOpenOutputPdf()) {
+                const revealPdf = document.createElement('button');
+                revealPdf.className = 'btn btn-secondary btn-sm';
+                revealPdf.type = 'button';
+                revealPdf.textContent = 'Show PDF';
+                revealPdf.addEventListener('click', () => {
+                    openRecentOutputPdf(job.job_id, actionStatus, revealPdf);
+                });
+                actions.appendChild(revealPdf);
+            }
+
+            if (canOpenOutputFolder()) {
+                const openFolder = document.createElement('button');
+                openFolder.className = 'btn btn-secondary btn-sm';
+                openFolder.type = 'button';
+                openFolder.textContent = 'Open Folder';
+                openFolder.addEventListener('click', () => {
+                    openRecentOutputFolder(job.job_id, actionStatus, openFolder);
+                });
+                actions.appendChild(openFolder);
+            }
+
+            item.appendChild(actionStatus);
+            item.appendChild(actions);
+        }
+
+        batchAcceptedList.appendChild(item);
     });
     batchAcceptedBlock.style.display = jobs.length ? 'block' : 'none';
 }
