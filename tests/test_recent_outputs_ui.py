@@ -38,6 +38,21 @@ class RecentOutputsUiTests(unittest.TestCase):
         self.assertIn("window.pywebview.api.open_output_pdf", template)
         self.assertIn("Show PDF in Folder", template)
 
+    def test_processing_page_surfaces_progress_and_error_state_clearly(self):
+        root = os.getcwd()
+        with open(os.path.join(root, "templates", "processing.html"), encoding="utf-8") as handle:
+            template = handle.read()
+
+        self.assertIn('id="stepText" aria-live="polite"', template)
+        self.assertIn('class="progress-info" aria-live="polite"', template)
+        self.assertIn('id="errorText" role="alert"', template)
+        self.assertIn('alt="Original page preview"', template)
+        self.assertIn('alt="Colorized page preview"', template)
+        self.assertIn("function showProcessingError(message, step)", template)
+        self.assertIn("showProcessingError(data.error, data.step)", template)
+        self.assertIn("Completed page ${page + 1} of ${total}", template)
+        self.assertIn("Processing was interrupted. Please return to upload and try again.", template)
+
 
 if __name__ == "__main__":
     unittest.main()

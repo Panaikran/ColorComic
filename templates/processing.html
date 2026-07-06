@@ -9,14 +9,14 @@
         <div id="processingActive">
             <div class="flex items-center justify-between" style="justify-content:center; gap:0.75rem;">
                 <span class="spinner"></span>
-                <span id="stepText">Starting colorization...</span>
+                <span id="stepText" aria-live="polite">Starting colorization...</span>
             </div>
             <p class="text-dim" style="font-size:0.75rem; margin-top:0.25rem;">
                 Device: <strong>{{ job.device | upper }}</strong>
             </p>
 
             <div class="progress-bar mt-2"><div class="fill" id="colorFill"></div></div>
-            <div class="progress-info">
+            <div class="progress-info" aria-live="polite">
                 <span id="colorCounter">0 / {{ job.page_count }}</span>
                 <span id="colorPct">0%</span>
             </div>
@@ -29,11 +29,13 @@
                     <div style="text-align:center;">
                         <div class="text-dim" style="font-size:0.75rem; margin-bottom:0.25rem;">Original</div>
                         <img id="previewOrigImg"
+                             alt="Original page preview"
                              style="max-width:360px; max-height:500px; border-radius:8px; border:1px solid var(--border); object-fit:contain;">
                     </div>
                     <div style="text-align:center;">
                         <div class="text-dim" style="font-size:0.75rem; margin-bottom:0.25rem;">Colorized</div>
                         <img id="previewColorImg"
+                             alt="Colorized page preview"
                              style="max-width:360px; max-height:500px; border-radius:8px; border:1px solid var(--border); object-fit:contain;">
                     </div>
                 </div>
@@ -56,7 +58,7 @@
         <div id="processingError" style="display:none;">
             <div style="font-size:3rem; margin-bottom:1rem;">&#10060;</div>
             <h3>Error</h3>
-            <p class="text-dim mt-1" id="errorText"></p>
+            <p class="text-dim mt-1" id="errorText" role="alert"></p>
             <a href="/" class="btn btn-secondary mt-2">Back to Upload</a>
         </div>
     </div>
@@ -117,6 +119,12 @@
         await runDesktopOutputAction(openOutputFolderBtn, 'open_output_folder', 'Could not open the output folder.');
     };
 
+    function showProcessingError(message, step) {
+        document.getElementById('processingActive').style.display = 'none';
+        document.getElementById('processingError').style.display = 'block';
+        document.getElementById('errorText').textContent = step ? `${step}: ${message}` : message;
+    }
+
     evtSource.onmessage = function(event) {
         const data = JSON.parse(event.data);
 
@@ -124,9 +132,7 @@
 
         if (data.error) {
             evtSource.close();
-            document.getElementById('processingActive').style.display = 'none';
-            document.getElementById('processingError').style.display = 'block';
-            document.getElementById('errorText').textContent = data.error;
+            showProcessingError(data.error, data.step);
             return;
         }
 
@@ -164,6 +170,7 @@
             const area = document.getElementById('previewArea');
             area.style.display = 'block';
             document.getElementById('previewPageNum').textContent = page + 1;
+            document.getElementById('stepText').textContent = `Completed page ${page + 1} of ${total}`;
             document.getElementById('previewOrigImg').src = `/pages/${JOB_ID}/${page}?t=${Date.now()}`;
             document.getElementById('previewColorImg').src = `/api/preview/${JOB_ID}/${page}?t=${Date.now()}`;
         }
@@ -171,6 +178,7 @@
 
     evtSource.onerror = function() {
         evtSource.close();
+        showProcessingError('Processing was interrupted. Please return to upload and try again.');
     };
 </script>
 {% endblock %}
