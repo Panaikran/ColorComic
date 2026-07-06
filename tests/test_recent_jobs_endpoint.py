@@ -207,6 +207,85 @@ class RecentJobsEndpointTests(unittest.TestCase):
         self.assertFalse(payload["jobs"][0]["output_pdf_exists"])
         self.assertFalse(payload["jobs"][0]["output_pdf_safe"])
 
+    def test_delete_recent_job_removes_history_entry_without_deleting_output(self):
+        original_config_dir = self.app_module.Config.CONFIG_DIR
+        original_output_folder = self.app_module.Config.OUTPUT_FOLDER
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_dir = os.path.join(temp_dir, "config")
+            output_folder = os.path.join(temp_dir, "output")
+            remove_pdf = os.path.join(output_folder, "remove-job", "colorized.pdf")
+            keep_pdf = os.path.join(output_folder, "keep-job", "colorized.pdf")
+            os.makedirs(os.path.dirname(remove_pdf), exist_ok=True)
+            os.makedirs(os.path.dirname(keep_pdf), exist_ok=True)
+            with open(remove_pdf, "wb") as handle:
+                handle.write(b"%PDF-1.4\n")
+            with open(keep_pdf, "wb") as handle:
+                handle.write(b"%PDF-1.4\n")
+
+            save_job_history(
+                [
+                    self.make_entry("remove-job", "2026-07-03T12:00:00Z", remove_pdf),
+                    self.make_entry("keep-job", "2026-07-03T11:00:00Z", keep_pdf),
+                ],
+                os.path.join(config_dir, "job_history.json"),
+            )
+            self.app_module.Config.CONFIG_DIR = config_dir
+            self.app_module.Config.OUTPUT_FOLDER = output_folder
+
+            try:
+                response = self.flask_app.routes["/api/recent-jobs/<job_id>"]("remove-job")
+                payload = self.flask_app.routes["/api/recent-jobs"]()
+            finally:
+                self.app_module.Config.CONFIG_DIR = original_config_dir
+                self.app_module.Config.OUTPUT_FOLDER = original_output_folder
+
+        self.assertEqual(response, {"removed": True, "job_id": "remove-job"})
+        self.assertEqual([job["job_id"] for job in payload["jobs"]], ["keep-job"])
+        self.assertTrue(os.path.isfile(remove_pdf))
+        self.assertTrue(os.path.isfile(keep_pdf))
+
+    def test_delete_recent_job_missing_entry_is_safe(self):
+        original_config_dir = self.app_module.Config.CONFIG_DIR
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_dir = os.path.join(temp_dir, "config")
+            save_job_history(
+                [self.make_entry("keep-job", "2026-07-03T12:00:00Z", os.path.join(temp_dir, "out.pdf"))],
+                os.path.join(config_dir, "job_history.json"),
+            )
+            self.app_module.Config.CONFIG_DIR = config_dir
+
+            try:
+                response = self.flask_app.routes["/api/recent-jobs/<job_id>"]("missing-job")
+                payload = self.flask_app.routes["/api/recent-jobs"]()
+            finally:
+                self.app_module.Config.CONFIG_DIR = original_config_dir
+
+        self.assertEqual(response, {"removed": False, "job_id": "missing-job"})
+        self.assertEqual(payload["jobs"][0]["job_id"], "keep-job")
+
+    def test_delete_recent_job_handles_missing_or_corrupt_history(self):
+        original_config_dir = self.app_module.Config.CONFIG_DIR
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            missing_config_dir = os.path.join(temp_dir, "missing-config")
+            corrupt_config_dir = os.path.join(temp_dir, "corrupt-config")
+            os.makedirs(corrupt_config_dir, exist_ok=True)
+            with open(os.path.join(corrupt_config_dir, "job_history.json"), "w", encoding="utf-8") as handle:
+                handle.write("{bad json")
+
+            self.app_module.Config.CONFIG_DIR = missing_config_dir
+            missing_response = self.flask_app.routes["/api/recent-jobs/<job_id>"]("job-1")
+
+            self.app_module.Config.CONFIG_DIR = corrupt_config_dir
+            corrupt_response = self.flask_app.routes["/api/recent-jobs/<job_id>"]("job-1")
+
+            self.app_module.Config.CONFIG_DIR = original_config_dir
+
+        self.assertEqual(missing_response, {"removed": False, "job_id": "job-1"})
+        self.assertEqual(corrupt_response, {"removed": False, "job_id": "job-1"})
+
 
 if __name__ == "__main__":
     unittest.main()

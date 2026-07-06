@@ -25,7 +25,12 @@ from core.batch_queue import (
     create_batch,
     transition_job,
 )
-from core.job_history import JobHistoryEntry, append_job_history, load_job_history
+from core.job_history import (
+    JobHistoryEntry,
+    append_job_history,
+    load_job_history,
+    remove_job_history_entry,
+)
 from core.preflight import validate_colorize_preflight
 from core.preferences import load_preferences, save_preferences
 
@@ -933,6 +938,15 @@ def create_app():
             reverse=True,
         )
         return jsonify({"jobs": [_recent_job_payload(entry) for entry in entries]})
+
+    @app.route("/api/recent-jobs/<job_id>", methods=["DELETE"])
+    def delete_recent_job(job_id):
+        entries = load_job_history()
+        remaining = remove_job_history_entry(job_id)
+        return jsonify({
+            "removed": len(remaining) != len(entries),
+            "job_id": job_id,
+        })
 
     @app.route("/api/preferences", methods=["GET", "POST"])
     def preferences():
