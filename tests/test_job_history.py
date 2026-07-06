@@ -9,6 +9,7 @@ from core.job_history import (
     append_job_history,
     get_history_path,
     load_job_history,
+    remove_job_history_entry,
     save_job_history,
 )
 
@@ -134,6 +135,59 @@ class JobHistoryTests(unittest.TestCase):
 
         self.assertEqual(len(entries), 1)
         self.assertIsNone(entries[0].batch_id)
+
+    def test_remove_history_entry_by_job_id_keeps_other_entries_and_files(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = os.path.join(temp_dir, HISTORY_FILENAME)
+            output_pdf = os.path.join(temp_dir, "output", "job-1", "colorized.pdf")
+            os.makedirs(os.path.dirname(output_pdf), exist_ok=True)
+            with open(output_pdf, "wb") as handle:
+                handle.write(b"%PDF-1.4\n")
+
+            remove_me = self.make_entry("job-1")
+            keep_me = self.make_entry("job-2")
+            remove_me = JobHistoryEntry(
+                job_id=remove_me.job_id,
+                original_filename=remove_me.original_filename,
+                mode=remove_me.mode,
+                completed_at=remove_me.completed_at,
+                output_pdf_path=output_pdf,
+                page_count=remove_me.page_count,
+                batch_id=remove_me.batch_id,
+            )
+            save_job_history([remove_me, keep_me], path)
+
+            entries = remove_job_history_entry("job-1", path)
+            loaded_entries = load_job_history(path)
+
+        self.assertEqual(entries, [keep_me])
+        self.assertEqual(loaded_entries, [keep_me])
+        self.assertTrue(os.path.isfile(output_pdf))
+
+    def test_remove_missing_history_entry_leaves_history_unchanged(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = os.path.join(temp_dir, HISTORY_FILENAME)
+            entry = self.make_entry()
+            save_job_history([entry], path)
+
+            entries = remove_job_history_entry("missing-job", path)
+            loaded_entries = load_job_history(path)
+
+        self.assertEqual(entries, [entry])
+        self.assertEqual(loaded_entries, [entry])
+
+    def test_remove_history_entry_recovers_from_missing_or_corrupt_history(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            missing_path = os.path.join(temp_dir, "missing", HISTORY_FILENAME)
+            corrupt_path = os.path.join(temp_dir, HISTORY_FILENAME)
+            with open(corrupt_path, "w", encoding="utf-8") as handle:
+                handle.write("{bad json")
+
+            missing_entries = remove_job_history_entry("job-1", missing_path)
+            corrupt_entries = remove_job_history_entry("job-1", corrupt_path)
+
+        self.assertEqual(missing_entries, [])
+        self.assertEqual(corrupt_entries, [])
 
 
 if __name__ == "__main__":

@@ -127,3 +127,11 @@ def append_job_history(
         entries = entries[:limit]
     save_job_history(entries, path)
     return entries
+
+
+def remove_job_history_entry(job_id: str, path: str | None = None) -> list[JobHistoryEntry]:
+    entries = load_job_history(path)
+    remaining = [entry for entry in entries if entry.job_id != job_id]
+    if len(remaining) != len(entries):
+        save_job_history(remaining, path)
+    return remaining
