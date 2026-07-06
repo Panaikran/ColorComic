@@ -21,6 +21,7 @@ class RecentOutputsUiTests(unittest.TestCase):
 
         self.assertIn("fetch('/api/recent-jobs')", script)
         self.assertIn("renderRecentOutput", script)
+        self.assertIn("Batch ${job.batch_id}", script)
         self.assertIn("output_pdf_exists", script)
         self.assertIn("output_pdf_safe", script)
         self.assertIn("window.pywebview.api.open_output_folder", script)

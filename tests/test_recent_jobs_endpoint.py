@@ -59,7 +59,7 @@ class RecentJobsEndpointTests(unittest.TestCase):
         for name in ("app", "flask", "dotenv"):
             sys.modules.pop(name, None)
 
-    def make_entry(self, job_id, completed_at, output_pdf_path, page_count=1):
+    def make_entry(self, job_id, completed_at, output_pdf_path, page_count=1, batch_id=None):
         return JobHistoryEntry(
             job_id=job_id,
             original_filename=f"{job_id}.pdf",
@@ -67,6 +67,7 @@ class RecentJobsEndpointTests(unittest.TestCase):
             completed_at=completed_at,
             output_pdf_path=output_pdf_path,
             page_count=page_count,
+            batch_id=batch_id,
         )
 
     def test_recent_jobs_returns_newest_first_with_output_existence(self):
@@ -106,6 +107,34 @@ class RecentJobsEndpointTests(unittest.TestCase):
         self.assertTrue(payload["jobs"][0]["output_pdf_exists"])
         self.assertTrue(payload["jobs"][0]["output_pdf_safe"])
         self.assertEqual(payload["jobs"][0]["page_count"], 2)
+        self.assertNotIn("batch_id", payload["jobs"][0])
+
+    def test_recent_jobs_includes_batch_id_when_present(self):
+        original_config_dir = self.app_module.Config.CONFIG_DIR
+        original_output_folder = self.app_module.Config.OUTPUT_FOLDER
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            config_dir = os.path.join(temp_dir, "config")
+            output_folder = os.path.join(temp_dir, "output")
+            output_pdf = os.path.join(output_folder, "job-1", "colorized.pdf")
+            os.makedirs(os.path.dirname(output_pdf), exist_ok=True)
+            with open(output_pdf, "wb") as handle:
+                handle.write(b"%PDF-1.4\n")
+
+            save_job_history(
+                [self.make_entry("job-1", "2026-07-03T12:00:00Z", output_pdf, batch_id="batch-1")],
+                os.path.join(config_dir, "job_history.json"),
+            )
+            self.app_module.Config.CONFIG_DIR = config_dir
+            self.app_module.Config.OUTPUT_FOLDER = output_folder
+
+            try:
+                payload = self.flask_app.routes["/api/recent-jobs"]()
+            finally:
+                self.app_module.Config.CONFIG_DIR = original_config_dir
+                self.app_module.Config.OUTPUT_FOLDER = original_output_folder
+
+        self.assertEqual(payload["jobs"][0]["batch_id"], "batch-1")
 
     def test_recent_jobs_marks_missing_output_file(self):
         original_config_dir = self.app_module.Config.CONFIG_DIR

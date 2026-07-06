@@ -70,6 +70,30 @@ class BatchUploadUiTests(unittest.TestCase):
         self.assertIn("openRecentOutputPdf(job.job_id, actionStatus, revealPdf)", batch_section)
         self.assertIn("openRecentOutputFolder(job.job_id, actionStatus, openFolder)", batch_section)
 
+    def test_upload_script_shows_cancel_for_queued_batch_jobs_only(self):
+        root = os.getcwd()
+        with open(os.path.join(root, "static", "js", "upload.js"), encoding="utf-8") as handle:
+            script = handle.read()
+
+        batch_section = script.split("function renderBatchJobs(jobs)", 1)[1].split("function stopBatchPolling()", 1)[0]
+        self.assertIn("if (job.status === 'queued')", batch_section)
+        self.assertIn("cancel.textContent = 'Cancel'", batch_section)
+        self.assertIn("cancelQueuedBatchJob(job.job_id, actionStatus, cancel)", batch_section)
+        self.assertNotIn("job.status === 'running'", batch_section)
+        self.assertNotIn("job.status === 'failed'", batch_section)
+        self.assertNotIn("job.status === 'cancelled'", batch_section)
+
+    def test_upload_script_cancels_queued_job_and_refreshes_batch_status(self):
+        root = os.getcwd()
+        with open(os.path.join(root, "static", "js", "upload.js"), encoding="utf-8") as handle:
+            script = handle.read()
+
+        self.assertIn("async function cancelQueuedBatchJob(jobId, statusElement, button)", script)
+        self.assertIn("`/api/batches/${encodeURIComponent(currentBatchId)}/jobs/${encodeURIComponent(jobId)}/cancel`", script)
+        self.assertIn("{ method: 'POST' }", script)
+        self.assertIn("await pollBatchStatus(currentBatchId)", script)
+        self.assertIn("Could not cancel this job.", script)
+
     def test_upload_script_preserves_single_pdf_colorization_flow(self):
         root = os.getcwd()
         with open(os.path.join(root, "static", "js", "upload.js"), encoding="utf-8") as handle:

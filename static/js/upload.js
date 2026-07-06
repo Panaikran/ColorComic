@@ -380,6 +380,27 @@ function renderBatchCounts(counts) {
     batchCounts.style.display = 'flex';
 }
 
+async function cancelQueuedBatchJob(jobId, statusElement, button) {
+    if (!currentBatchId) return;
+
+    statusElement.textContent = '';
+    button.disabled = true;
+    try {
+        const response = await fetch(
+            `/api/batches/${encodeURIComponent(currentBatchId)}/jobs/${encodeURIComponent(jobId)}/cancel`,
+            { method: 'POST' },
+        );
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data && data.error ? data.error : 'Could not cancel this job.');
+        }
+        await pollBatchStatus(currentBatchId);
+    } catch (error) {
+        statusElement.textContent = error && error.message ? error.message : 'Could not cancel this job.';
+        button.disabled = false;
+    }
+}
+
 function renderBatchJobs(jobs) {
     batchAcceptedList.replaceChildren();
     jobs.forEach(job => {
@@ -398,6 +419,26 @@ function renderBatchJobs(jobs) {
         meta.className = 'text-dim';
         meta.textContent = ` - ${details.join(' - ')}`;
         item.appendChild(meta);
+
+        if (job.status === 'queued') {
+            const actionStatus = document.createElement('p');
+            actionStatus.className = 'text-dim recent-output-action-status';
+
+            const actions = document.createElement('div');
+            actions.className = 'recent-output-actions';
+
+            const cancel = document.createElement('button');
+            cancel.className = 'btn btn-secondary btn-sm';
+            cancel.type = 'button';
+            cancel.textContent = 'Cancel';
+            cancel.addEventListener('click', () => {
+                cancelQueuedBatchJob(job.job_id, actionStatus, cancel);
+            });
+            actions.appendChild(cancel);
+
+            item.appendChild(actionStatus);
+            item.appendChild(actions);
+        }
 
         if (job.status === 'completed' && job.output_pdf_exists && job.output_pdf_safe) {
             const actionStatus = document.createElement('p');
@@ -689,6 +730,9 @@ function buildRecentOutputMeta(job) {
         formatMode(job.mode),
         formatCompletedAt(job.completed_at),
     ];
+    if (job.batch_id) {
+        parts.splice(1, 0, `Batch ${job.batch_id}`);
+    }
     if (Number.isInteger(job.page_count)) {
         parts.push(`${job.page_count} page${job.page_count === 1 ? '' : 's'}`);
     }
