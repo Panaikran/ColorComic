@@ -125,6 +125,7 @@ hiddenimports = [
     "config",
     "desktop",
     "models.schemas",
+    "core.batch_queue",
     "core.color_consistency",
     "core.job_history",
     "core.ml_colorizer",

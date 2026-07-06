@@ -44,6 +44,28 @@ class ReleaseVersionDocsTests(unittest.TestCase):
         self.assertIn("## v0.2.1 Summary", readme)
         self.assertIn("maintenance release", readme)
 
+    def test_packaging_docs_cover_batch_validation(self):
+        validation = self.read_file("packaging", "VALIDATION.md")
+        packaging_readme = self.read_file("packaging", "README.md")
+
+        for expected in (
+            "Batch processing",
+            "Start Batch",
+            "queued",
+            "cancelled",
+            "Recent Outputs shows completed batch jobs",
+        ):
+            with self.subTest(expected=expected):
+                self.assertIn(expected, validation)
+
+        self.assertIn("tests.test_batch_queue", packaging_readme)
+        self.assertIn("core\\batch_queue.py", packaging_readme)
+
+    def test_pyinstaller_spec_includes_batch_queue_helper(self):
+        spec = self.read_file("packaging", "ColorComic.spec")
+
+        self.assertIn('"core.batch_queue"', spec)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -174,7 +174,28 @@ behavior, and permissions issues that a developer machine can hide.
       `%LOCALAPPDATA%\ColorComic\config\preferences.json` is the only
       preferences file written.
 
-12. First-run model download:
+12. Batch processing:
+    - Select multiple valid PDFs on the upload page.
+      Expected: the UI creates a batch instead of starting processing
+      immediately.
+    - Include one damaged or unreadable PDF in the selection.
+      Expected: valid PDFs are accepted, the invalid file shows a concise
+      per-file preflight error, and no model loading/download starts yet.
+    - Click **Start Batch**.
+      Expected: queued jobs process sequentially and the UI polls queue status.
+    - Confirm queue statuses are visible as jobs move through `queued`,
+      `running`, `completed`, `failed`, and `cancelled` where applicable.
+    - Cancel a job that is still `queued`.
+      Expected: the job becomes `cancelled`, running jobs are not cancelled,
+      and uploaded/runtime folders are not deleted.
+    - For each completed batch job, confirm Download PDF works.
+    - In desktop mode, confirm completed batch jobs show working **Open Folder**
+      and **Show PDF** actions.
+    - Return to the upload page.
+      Expected: Recent Outputs shows completed batch jobs with a small batch
+      identifier/label while older single-job entries remain unchanged.
+
+13. First-run model download:
     - Use a tiny one-page black-and-white PDF.
     - Upload it in auto mode.
     - Confirm the app downloads auto-mode weights into
@@ -185,7 +206,7 @@ behavior, and permissions issues that a developer machine can hide.
     - Confirm the UI does not freeze permanently while the download/model load
       happens.
 
-13. Tiny one-page PDF processing:
+14. Tiny one-page PDF processing:
     - Process a one-page PDF in auto mode.
     - Confirm the processing page receives progress updates.
     - Confirm preview image loads.
@@ -199,7 +220,7 @@ behavior, and permissions issues that a developer machine can hide.
       `%LOCALAPPDATA%\ColorComic\output\<job_id>\colorized.pdf` in Explorer.
     - Confirm output files are under `%LOCALAPPDATA%\ColorComic\output`.
 
-14. Recent Outputs:
+15. Recent Outputs:
     - Return to the upload page after at least one successful job.
     - Confirm Recent Outputs lists newest-first completed jobs.
     - Confirm each available safe output shows Download.
@@ -210,20 +231,20 @@ behavior, and permissions issues that a developer machine can hide.
     - If the job history file is missing or corrupt, expected: Recent Outputs
       shows the empty state or a non-blocking load failure, not a startup crash.
 
-15. Reference-mode first-run progress:
+16. Reference-mode first-run progress:
     - Upload a PDF with a colored reference page.
     - Confirm the processing page shows visible messages such as
       `Downloading MangaNinja weights...`, `Loading SD 1.5 components...`,
       and `Loading Reference mode model...`.
     - Confirm Reference mode can still finish after the first-run downloads.
 
-16. Failed network download handling:
+17. Failed network download handling:
     - Disconnect the network or block access to Google Drive/HuggingFace.
     - Start a colorization job that needs a missing model.
     - Expected: job enters an error state and the UI shows a useful failure
       instead of hanging indefinitely.
 
-17. App close releases process and port:
+18. App close releases process and port:
     - Close the ColorComic window.
     - Confirm `ColorComic.exe` exits.
     - Confirm the localhost listening port is released:
@@ -234,7 +255,7 @@ behavior, and permissions issues that a developer machine can hide.
         Where-Object { $_.OwningProcess -eq <old-process-id> }
       ```
 
-18. SmartScreen/Defender notes:
+19. SmartScreen/Defender notes:
     - Unsigned builds may show Microsoft Defender SmartScreen warnings.
     - Defender may scan or delay first launch because the folder is large and
       contains ML/runtime DLLs.
@@ -259,6 +280,9 @@ Do not publish the one-folder build or installer if any of these fail:
 - Show PDF in Folder fails to reveal the generated runtime PDF in desktop mode.
 - Recent Outputs cannot list completed jobs or crashes on missing/corrupt
   history.
+- Batch upload, Start Batch, queued-job cancellation, queue polling, completed
+  batch output actions, or Recent Outputs batch metadata fail in the packaged
+  app.
 - Preferences cannot load/save, exposes GPU/CUDA options, or writes outside
   `%LOCALAPPDATA%\ColorComic\config`.
 - Model download/loading progress is invisible during first-run auto or

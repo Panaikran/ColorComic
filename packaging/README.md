@@ -42,6 +42,18 @@ python -m unittest `
   tests.test_upload_preferences_ui
 ```
 
+Run the v0.3.0 batch-focused tests when validating batch builds:
+
+```powershell
+python -m unittest `
+  tests.test_batch_queue `
+  tests.test_batch_upload `
+  tests.test_queue_api `
+  tests.test_batch_upload_ui `
+  tests.test_recent_jobs_endpoint `
+  tests.test_recent_outputs_ui
+```
+
 ## Build
 
 Expected command:
@@ -77,8 +89,8 @@ Bundled read-only resources:
 - `THIRD_PARTY_NOTICES.md` or `NOTICE`, if present
 
 The PyInstaller spec also collects project Python modules, including the
-runtime helpers under `core\preflight.py`, `core\job_history.py`, and
-`core\preferences.py`.
+runtime helpers under `core\preflight.py`, `core\job_history.py`,
+`core\preferences.py`, and `core\batch_queue.py`.
 
 Not bundled:
 
@@ -114,6 +126,9 @@ Confirm:
 - Recent Outputs lists completed jobs and handles missing outputs.
 - Preferences load/save under `%LOCALAPPDATA%\ColorComic\config`.
 - Desktop-only Open Folder / Show PDF output actions work for completed jobs.
+- Multi-PDF batch upload, Start Batch, queue status polling, queued-job
+  cancellation, completed batch output actions, and Recent Outputs batch
+  metadata work in the packaged app.
 
 ## Installer
 
