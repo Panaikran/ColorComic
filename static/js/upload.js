@@ -782,6 +782,31 @@ async function openRecentOutputPdf(jobId, statusElement, button) {
     }
 }
 
+async function removeRecentOutput(jobId, item, statusElement, button) {
+    statusElement.textContent = 'Removing from list only...';
+    button.disabled = true;
+    try {
+        const response = await fetch(`/api/recent-jobs/${encodeURIComponent(jobId)}`, {
+            method: 'DELETE',
+        });
+        const result = await response.json();
+        if (!response.ok || !result || result.removed !== true) {
+            throw new Error('Could not remove this output from the list.');
+        }
+
+        item.remove();
+        const remaining = recentOutputsList.children.length;
+        recentOutputsStatus.textContent = remaining ? `${remaining} saved` : '';
+        recentOutputsEmpty.style.display = remaining ? 'none' : 'block';
+        recentOutputsList.style.display = remaining ? 'grid' : 'none';
+    } catch (error) {
+        statusElement.textContent = error && error.message
+            ? error.message
+            : 'Could not remove this output from the list.';
+        button.disabled = false;
+    }
+}
+
 function renderRecentOutput(job) {
     const item = document.createElement('article');
     item.className = 'recent-output-item';
@@ -841,6 +866,16 @@ function renderRecentOutput(job) {
         unavailable.textContent = 'Unavailable';
         actions.appendChild(unavailable);
     }
+
+    const remove = document.createElement('button');
+    remove.className = 'btn btn-secondary btn-sm';
+    remove.type = 'button';
+    remove.textContent = 'Remove from list';
+    remove.title = 'Removes this history entry only. Output files stay on disk.';
+    remove.addEventListener('click', () => {
+        removeRecentOutput(job.job_id, item, actionStatus, remove);
+    });
+    actions.appendChild(remove);
 
     item.appendChild(actions);
     return item;

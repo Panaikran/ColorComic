@@ -28,6 +28,12 @@ class RecentOutputsUiTests(unittest.TestCase):
         self.assertIn("window.pywebview.api.open_output_pdf", script)
         self.assertIn("Show PDF", script)
         self.assertIn("/api/download/", script)
+        self.assertIn("Remove from list", script)
+        self.assertIn("Removes this history entry only. Output files stay on disk.", script)
+        self.assertIn("fetch(`/api/recent-jobs/${encodeURIComponent(jobId)}`", script)
+        self.assertIn("method: 'DELETE'", script)
+        self.assertIn("item.remove()", script)
+        self.assertIn("Could not remove this output from the list.", script)
 
     def test_processing_page_supports_desktop_pdf_reveal_action(self):
         root = os.getcwd()
