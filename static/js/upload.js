@@ -4,6 +4,7 @@ const dropZone = document.getElementById('dropZone');
 const fileInput = document.getElementById('fileInput');
 const uploadBtn = document.getElementById('uploadBtn');
 const fileInfo = document.getElementById('fileInfo');
+const selectedFilesList = document.getElementById('selectedFilesList');
 
 let selectedFile = null;
 let selectedFiles = [];
@@ -37,12 +38,34 @@ function isPdfFile(file) {
     return /\.pdf$/i.test(file.name);
 }
 
+function formatFileSize(bytes) {
+    return (bytes / (1024 * 1024)).toFixed(1);
+}
+
+function renderSelectedFilesList() {
+    if (!selectedFilesList) return;
+
+    selectedFilesList.replaceChildren();
+    if (selectedFiles.length <= 1) {
+        selectedFilesList.style.display = 'none';
+        return;
+    }
+
+    selectedFiles.forEach(file => {
+        const item = document.createElement('li');
+        item.textContent = `${file.name} (${formatFileSize(file.size)} MB)`;
+        selectedFilesList.appendChild(item);
+    });
+    selectedFilesList.style.display = 'block';
+}
+
 function selectFiles(fileList) {
     selectedFiles = Array.from(fileList).filter(isPdfFile);
     selectedFile = selectedFiles.length ? selectedFiles[0] : null;
 
     if (!selectedFiles.length) {
         fileInfo.style.display = 'none';
+        renderSelectedFilesList();
         hideBatchResult();
         updateUploadButtonState();
         return;
@@ -52,7 +75,7 @@ function selectFiles(fileList) {
     const fileSize = document.getElementById('fileSize');
     const fileHint = document.getElementById('fileHint');
     const totalSize = selectedFiles.reduce((sum, file) => sum + file.size, 0);
-    const sizeMB = (totalSize / (1024 * 1024)).toFixed(1);
+    const sizeMB = formatFileSize(totalSize);
 
     if (selectedFiles.length === 1) {
         fileName.textContent = selectedFile.name;
@@ -63,6 +86,7 @@ function selectFiles(fileList) {
         fileSize.textContent = `(${sizeMB} MB total)`;
         fileHint.textContent = 'Batch creation supports Auto mode only and will not start processing yet.';
     }
+    renderSelectedFilesList();
     fileInfo.style.display = 'block';
     hideBatchResult();
     updateUploadButtonState();

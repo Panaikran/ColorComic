@@ -14,6 +14,7 @@ class BatchUploadUiTests(unittest.TestCase):
         self.assertIn('id="startBatchBtn"', template)
         self.assertIn('id="batchStatusText"', template)
         self.assertIn('id="batchCounts"', template)
+        self.assertIn('id="selectedFilesList"', template)
         self.assertIn('id="batchAcceptedList"', template)
         self.assertIn('id="batchErrorList"', template)
         self.assertIn("Processing has not started yet.", template)
@@ -31,6 +32,20 @@ class BatchUploadUiTests(unittest.TestCase):
         self.assertIn("Batch created. Processing has not started yet.", script)
         self.assertIn("startBatchBtn.style.display = data.batch_id ? '' : 'none'", script)
         self.assertIn("startBatchBtn.addEventListener('click', startCurrentBatch)", script)
+
+    def test_upload_script_shows_selected_file_list_for_batches_only(self):
+        root = os.getcwd()
+        with open(os.path.join(root, "static", "js", "upload.js"), encoding="utf-8") as handle:
+            script = handle.read()
+
+        self.assertIn("const selectedFilesList = document.getElementById('selectedFilesList')", script)
+        self.assertIn("function renderSelectedFilesList()", script)
+        self.assertIn("selectedFilesList.replaceChildren()", script)
+        self.assertIn("if (selectedFiles.length <= 1)", script)
+        self.assertIn("selectedFilesList.style.display = 'none'", script)
+        self.assertIn("selectedFiles.forEach(file =>", script)
+        self.assertIn("item.textContent = `${file.name} (${formatFileSize(file.size)} MB)`", script)
+        self.assertIn("selectedFilesList.style.display = 'block'", script)
 
     def test_upload_script_starts_batch_and_polls_status(self):
         root = os.getcwd()
