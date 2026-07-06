@@ -3,7 +3,7 @@ import re
 import unittest
 
 
-RELEASE_VERSION = "0.2.1"
+RELEASE_VERSION = "0.3.0"
 INSTALLER_NAME = f"ColorComic-Setup-{RELEASE_VERSION}-win64-cpu.exe"
 
 
@@ -41,8 +41,8 @@ class ReleaseVersionDocsTests(unittest.TestCase):
     def test_readme_mentions_current_release_summary(self):
         readme = self.read_file("README.md")
 
-        self.assertIn("## v0.2.1 Summary", readme)
-        self.assertIn("maintenance release", readme)
+        self.assertIn("## v0.3.0 Summary", readme)
+        self.assertIn("batch processing", readme)
 
     def test_packaging_docs_cover_batch_validation(self):
         validation = self.read_file("packaging", "VALIDATION.md")

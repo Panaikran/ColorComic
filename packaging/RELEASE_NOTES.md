@@ -1,5 +1,41 @@
 # ColorComic Release Notes
 
+## v0.3.0 - Batch Processing and Queue
+
+This release adds conservative Auto-mode batch processing while preserving the
+Windows CPU desktop architecture, local Flask backend, one-folder PyInstaller
+build, and first-use model download behavior.
+
+### Added
+
+- Multi-PDF batch upload for Auto mode.
+- Sequential queue processing with Start Batch and visible per-job statuses.
+- Queued-job cancellation for jobs that have not started yet.
+- Completed batch job actions:
+  - Download PDF
+  - Open Folder in desktop mode
+  - Show PDF in desktop mode
+- Recent Outputs batch metadata so batch-origin jobs show their batch label
+  while existing single-job history remains compatible.
+
+### Changed
+
+- Packaging validation now covers batch upload, batch preflight errors, queue
+  polling, queued-job cancellation, completed batch output actions, and Recent
+  Outputs batch metadata.
+- PyInstaller packaging now explicitly includes `core.batch_queue`.
+- Installer/package version is now `0.3.0`; expected installer output is
+  `packaging\inno\output\ColorComic-Setup-0.3.0-win64-cpu.exe`.
+
+### Unchanged
+
+- No model behavior changes.
+- No CUDA build.
+- No auto-updater.
+- No cloud features or telemetry.
+- Model weights are still downloaded on first use and are not bundled.
+- Runtime data is still stored under `%LOCALAPPDATA%\ColorComic`.
+
 ## v0.2.1 - Installer Workflow Maintenance
 
 This maintenance release keeps end-user app behavior unchanged and improves the

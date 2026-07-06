@@ -182,7 +182,7 @@ path, and size in MB.
 Expected installer output:
 
 ```text
-packaging\inno\output\ColorComic-Setup-0.2.1-win64-cpu.exe
+packaging\inno\output\ColorComic-Setup-0.3.0-win64-cpu.exe
 ```
 
 The installer copies `dist\ColorComic` into Program Files, creates a Start Menu
@@ -192,7 +192,17 @@ uninstall entry.
 The app, installer, and shortcuts use the shared icon asset at
 `static\img\colorcomic.ico`.
 
-For v0.2.1, also verify the installer workflow hardening before publishing:
+For v0.3.0, also verify the batch processing workflow before publishing:
+
+- Multi-PDF batch upload accepts valid PDFs and reports per-file preflight
+  errors for invalid PDFs.
+- **Start Batch** begins sequential queue processing and status polling.
+- Queued jobs can be cancelled; running jobs are not cancelled.
+- Completed batch jobs support Download, Open Folder, and Show PDF actions.
+- Recent Outputs shows batch metadata for batch-origin jobs and preserves
+  single-job entries.
+
+Also keep verifying the installer workflow hardening:
 
 - `build_installer.ps1` discovers `ISCC.exe` through the documented lookup
   order or reports every checked location.
@@ -211,7 +221,7 @@ Continue to verify the v0.2.0 local workflow hardening:
 - Desktop-only **Open Folder** and **Show PDF** actions open runtime output
   locations.
 
-See `packaging\RELEASE_NOTES.md` for the v0.2.1 release summary.
+See `packaging\RELEASE_NOTES.md` for the v0.3.0 release summary.
 
 Uninstall preserves runtime data by default:
 

@@ -21,22 +21,23 @@ Automatically colorize black-and-white comic and manga pages using deep learning
 - **Cross-page color consistency** — LAB color transfer keeps character/environment colors consistent across pages (auto mode)
 - **Live preview** — side-by-side original vs. colorized comparison updates in real-time during processing
 - **PDF in, PDF out** — upload a B&W comic PDF, download a colorized PDF with a source-aware filename
+- **Batch processing** — create Auto-mode batches from multiple PDFs, start the queue when ready, and track each job
 - **Preflight validation** — invalid PDFs, empty PDFs, invalid reference images, and output write problems are caught before model loading
-- **Recent Outputs** — completed local jobs are listed newest-first with download and desktop output actions
+- **Recent Outputs** — completed local jobs are listed newest-first with download, desktop output actions, and batch labels
 - **Local Preferences** — save safe local defaults such as Auto/Reference mode and whether to open output folders after completion
 - **Desktop output access** — desktop mode can open completed job folders and reveal generated PDFs in Explorer
 - **Visible first-run progress** — model downloads and model loading phases are shown on the processing page
 - **Zero cloud dependency** — everything runs locally, no API keys needed
 - **Auto model download** — weights are downloaded automatically on first use
 
-## v0.2.1 Summary
+## v0.3.0 Summary
 
-ColorComic v0.2.1 is a maintenance release for the Windows CPU desktop app. It
-improves the installer build workflow with automatic Inno Setup compiler
-discovery, clearer missing-compiler diagnostics, installer preflight checks,
-post-build installer output validation, and updated packaging documentation.
-The release keeps app behavior, model behavior, CPU-only packaging, and
-first-use model downloads unchanged.
+ColorComic v0.3.0 adds conservative Auto-mode batch processing to the Windows
+CPU desktop app. You can select multiple PDFs, review per-file preflight
+errors, start the batch queue when ready, cancel jobs that have not started,
+and use Download, Open Folder, and Show PDF actions for completed batch jobs.
+Recent Outputs now shows batch metadata for batch-origin jobs while keeping
+single-PDF history unchanged.
 
 ## How It Works
 
