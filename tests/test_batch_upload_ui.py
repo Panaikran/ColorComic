@@ -15,6 +15,8 @@ class BatchUploadUiTests(unittest.TestCase):
         self.assertIn('id="batchStatusText"', template)
         self.assertIn('id="batchCounts"', template)
         self.assertIn('id="selectedFilesList"', template)
+        self.assertIn('id="batchAcceptedTitle"', template)
+        self.assertIn('id="batchErrorsTitle"', template)
         self.assertIn('id="batchAcceptedList"', template)
         self.assertIn('id="batchErrorList"', template)
         self.assertIn("Processing has not started yet.", template)
@@ -32,6 +34,20 @@ class BatchUploadUiTests(unittest.TestCase):
         self.assertIn("Batch created. Processing has not started yet.", script)
         self.assertIn("startBatchBtn.style.display = data.batch_id ? '' : 'none'", script)
         self.assertIn("startBatchBtn.addEventListener('click', startCurrentBatch)", script)
+
+    def test_upload_script_labels_batch_creation_results_with_counts(self):
+        root = os.getcwd()
+        with open(os.path.join(root, "static", "js", "upload.js"), encoding="utf-8") as handle:
+            script = handle.read()
+
+        self.assertIn("const batchAcceptedTitle = document.getElementById('batchAcceptedTitle')", script)
+        self.assertIn("const batchErrorsTitle = document.getElementById('batchErrorsTitle')", script)
+        self.assertIn("function appendBatchListItem(list, primary, secondary, statusLabel)", script)
+        self.assertIn("label.textContent = `${statusLabel}: `", script)
+        self.assertIn("appendBatchListItem(batchAcceptedList, job.filename || job.job_id, pageText, 'Ready')", script)
+        self.assertIn("'Rejected',", script)
+        self.assertIn("batchAcceptedTitle.textContent = `Accepted PDFs (${jobs.length})`", script)
+        self.assertIn("batchErrorsTitle.textContent = `Files That Need Attention (${errors.length})`", script)
 
     def test_upload_script_shows_selected_file_list_for_batches_only(self):
         root = os.getcwd()

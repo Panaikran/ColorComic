@@ -376,8 +376,10 @@ document.getElementById('detectGpuBtn').addEventListener('click', async () => {
 const batchResult = document.getElementById('batchResult');
 const batchIdText = document.getElementById('batchIdText');
 const batchAcceptedBlock = document.getElementById('batchAcceptedBlock');
+const batchAcceptedTitle = document.getElementById('batchAcceptedTitle');
 const batchAcceptedList = document.getElementById('batchAcceptedList');
 const batchErrorsBlock = document.getElementById('batchErrorsBlock');
+const batchErrorsTitle = document.getElementById('batchErrorsTitle');
 const batchErrorList = document.getElementById('batchErrorList');
 const startBatchBtn = document.getElementById('startBatchBtn');
 const batchStatusText = document.getElementById('batchStatusText');
@@ -392,8 +394,14 @@ function hideBatchResult() {
     currentBatchId = null;
 }
 
-function appendBatchListItem(list, primary, secondary) {
+function appendBatchListItem(list, primary, secondary, statusLabel) {
     const item = document.createElement('li');
+    if (statusLabel) {
+        const label = document.createElement('span');
+        label.className = 'text-dim';
+        label.textContent = `${statusLabel}: `;
+        item.appendChild(label);
+    }
     const strong = document.createElement('strong');
     strong.textContent = primary;
     item.appendChild(strong);
@@ -599,16 +607,19 @@ function renderBatchResult(data) {
         const pageText = Number.isInteger(job.page_count)
             ? `${job.page_count} page${job.page_count === 1 ? '' : 's'}`
             : 'Queued';
-        appendBatchListItem(batchAcceptedList, job.filename || job.job_id, pageText);
+        appendBatchListItem(batchAcceptedList, job.filename || job.job_id, pageText, 'Ready');
     });
     errors.forEach(error => {
         appendBatchListItem(
             batchErrorList,
             error.filename || 'File',
             error.message || error.code || 'Could not prepare this PDF.',
+            'Rejected',
         );
     });
 
+    if (batchAcceptedTitle) batchAcceptedTitle.textContent = `Accepted PDFs (${jobs.length})`;
+    if (batchErrorsTitle) batchErrorsTitle.textContent = `Files That Need Attention (${errors.length})`;
     batchAcceptedBlock.style.display = jobs.length ? 'block' : 'none';
     batchErrorsBlock.style.display = errors.length ? 'block' : 'none';
     batchResult.style.display = 'block';
