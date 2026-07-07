@@ -14,6 +14,7 @@ class BatchUploadUiTests(unittest.TestCase):
         self.assertIn('id="startBatchBtn"', template)
         self.assertIn('id="batchStatusText"', template)
         self.assertIn('id="batchCounts"', template)
+        self.assertIn('id="batchModeNotice"', template)
         self.assertIn('id="selectedFilesList"', template)
         self.assertIn('id="batchAcceptedTitle"', template)
         self.assertIn('id="batchErrorsTitle"', template)
@@ -48,6 +49,20 @@ class BatchUploadUiTests(unittest.TestCase):
         self.assertIn("'Rejected',", script)
         self.assertIn("batchAcceptedTitle.textContent = `Accepted PDFs (${jobs.length})`", script)
         self.assertIn("batchErrorsTitle.textContent = `Files That Need Attention (${errors.length})`", script)
+
+    def test_upload_script_shows_auto_only_notice_for_batch_selection(self):
+        root = os.getcwd()
+        with open(os.path.join(root, "static", "js", "upload.js"), encoding="utf-8") as handle:
+            script = handle.read()
+
+        self.assertIn("const batchModeNotice = document.getElementById('batchModeNotice')", script)
+        self.assertIn("function updateBatchModeNotice()", script)
+        self.assertIn("if (selectedFiles.length <= 1)", script)
+        self.assertIn("batchModeNotice.style.display = 'none'", script)
+        self.assertIn("Batch processing currently supports Auto mode only.", script)
+        self.assertIn("Reference mode is available only for single-PDF processing.", script)
+        self.assertIn("Select Auto mode to create this batch.", script)
+        self.assertIn("updateBatchModeNotice()", script)
 
     def test_upload_script_shows_selected_file_list_for_batches_only(self):
         root = os.getcwd()
@@ -155,7 +170,7 @@ class BatchUploadUiTests(unittest.TestCase):
             script = handle.read()
 
         self.assertIn("selectedFiles.length > 1 && mode === 'reference'", script)
-        self.assertIn("Batch creation supports Auto mode only", script)
+        self.assertIn("Batch processing currently supports Auto mode only", script)
         self.assertIn("formData.append('mode', 'auto')", script)
 
 

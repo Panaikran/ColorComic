@@ -4,6 +4,7 @@ const dropZone = document.getElementById('dropZone');
 const fileInput = document.getElementById('fileInput');
 const uploadBtn = document.getElementById('uploadBtn');
 const fileInfo = document.getElementById('fileInfo');
+const batchModeNotice = document.getElementById('batchModeNotice');
 const selectedFilesList = document.getElementById('selectedFilesList');
 
 let selectedFile = null;
@@ -79,12 +80,29 @@ function removeSelectedFile(index) {
     selectFiles(selectedFiles);
 }
 
+function updateBatchModeNotice() {
+    if (!batchModeNotice) return;
+
+    if (selectedFiles.length <= 1) {
+        batchModeNotice.style.display = 'none';
+        batchModeNotice.textContent = '';
+        return;
+    }
+
+    const suffix = getSelectedMode() === 'reference'
+        ? ' Select Auto mode to create this batch.'
+        : '';
+    batchModeNotice.textContent = `Batch processing currently supports Auto mode only. Reference mode is available only for single-PDF processing.${suffix}`;
+    batchModeNotice.style.display = 'block';
+}
+
 function selectFiles(fileList) {
     selectedFiles = Array.from(fileList).filter(isPdfFile);
     selectedFile = selectedFiles.length ? selectedFiles[0] : null;
 
     if (!selectedFiles.length) {
         fileInfo.style.display = 'none';
+        updateBatchModeNotice();
         renderSelectedFilesList();
         hideBatchResult();
         updateUploadButtonState();
@@ -104,8 +122,9 @@ function selectFiles(fileList) {
     } else {
         fileName.textContent = `${selectedFiles.length} PDFs selected`;
         fileSize.textContent = `(${sizeMB} MB total)`;
-        fileHint.textContent = 'Batch creation supports Auto mode only and will not start processing yet.';
+        fileHint.textContent = 'Review the selected PDFs, then create the batch.';
     }
+    updateBatchModeNotice();
     renderSelectedFilesList();
     fileInfo.style.display = 'block';
     hideBatchResult();
@@ -123,6 +142,7 @@ const preferencesStatus = document.getElementById('preferencesStatus');
 function updateModeSection() {
     const isReference = getSelectedMode() === 'reference';
     referenceSection.style.display = isReference ? 'block' : 'none';
+    updateBatchModeNotice();
     updateUploadButtonState();
 }
 
