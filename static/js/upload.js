@@ -51,12 +51,32 @@ function renderSelectedFilesList() {
         return;
     }
 
-    selectedFiles.forEach(file => {
+    selectedFiles.forEach((file, index) => {
         const item = document.createElement('li');
-        item.textContent = `${file.name} (${formatFileSize(file.size)} MB)`;
+        item.style.marginBottom = '0.35rem';
+
+        const label = document.createElement('span');
+        label.textContent = `${file.name} (${formatFileSize(file.size)} MB)`;
+        item.appendChild(label);
+
+        const remove = document.createElement('button');
+        remove.type = 'button';
+        remove.className = 'btn btn-sm btn-secondary';
+        remove.textContent = 'Remove';
+        remove.setAttribute('aria-label', `Remove ${file.name}`);
+        remove.style.marginLeft = '0.5rem';
+        remove.addEventListener('click', () => removeSelectedFile(index));
+        item.appendChild(remove);
+
         selectedFilesList.appendChild(item);
     });
     selectedFilesList.style.display = 'block';
+}
+
+function removeSelectedFile(index) {
+    selectedFiles.splice(index, 1);
+    if (!selectedFiles.length) fileInput.value = '';
+    selectFiles(selectedFiles);
 }
 
 function selectFiles(fileList) {

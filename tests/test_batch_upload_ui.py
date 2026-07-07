@@ -43,9 +43,22 @@ class BatchUploadUiTests(unittest.TestCase):
         self.assertIn("selectedFilesList.replaceChildren()", script)
         self.assertIn("if (selectedFiles.length <= 1)", script)
         self.assertIn("selectedFilesList.style.display = 'none'", script)
-        self.assertIn("selectedFiles.forEach(file =>", script)
-        self.assertIn("item.textContent = `${file.name} (${formatFileSize(file.size)} MB)`", script)
+        self.assertIn("selectedFiles.forEach((file, index) =>", script)
+        self.assertIn("label.textContent = `${file.name} (${formatFileSize(file.size)} MB)`", script)
         self.assertIn("selectedFilesList.style.display = 'block'", script)
+
+    def test_upload_script_removes_selected_files_before_batch_creation(self):
+        root = os.getcwd()
+        with open(os.path.join(root, "static", "js", "upload.js"), encoding="utf-8") as handle:
+            script = handle.read()
+
+        self.assertIn("remove.textContent = 'Remove'", script)
+        self.assertIn("remove.setAttribute('aria-label', `Remove ${file.name}`)", script)
+        self.assertIn("remove.addEventListener('click', () => removeSelectedFile(index))", script)
+        self.assertIn("function removeSelectedFile(index)", script)
+        self.assertIn("selectedFiles.splice(index, 1)", script)
+        self.assertIn("if (!selectedFiles.length) fileInput.value = ''", script)
+        self.assertIn("selectFiles(selectedFiles)", script)
 
     def test_upload_script_starts_batch_and_polls_status(self):
         root = os.getcwd()
