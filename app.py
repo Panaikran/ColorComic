@@ -9,7 +9,10 @@ from __future__ import annotations
 import json
 import logging
 import os
+import platform
 import queue
+import shutil
+import sys
 import threading
 import uuid
 from datetime import datetime, timezone
@@ -591,6 +594,67 @@ def _model_status_payload():
     }
 
 
+def _path_status(path: str) -> dict:
+    return {
+        "path": path,
+        "exists": os.path.exists(path),
+        "is_dir": os.path.isdir(path),
+    }
+
+
+def _disk_free_status(path: str) -> dict:
+    target = path
+    while target and not os.path.exists(target):
+        parent = os.path.dirname(target)
+        if parent == target:
+            break
+        target = parent
+    try:
+        usage = shutil.disk_usage(target or os.getcwd())
+    except OSError as exc:
+        return {"available": False, "error": str(exc)}
+    return {
+        "available": True,
+        "checked_path": target or os.getcwd(),
+        "free_bytes": usage.free,
+        "total_bytes": usage.total,
+    }
+
+
+def _diagnostics_payload() -> dict:
+    cuda_available, current_device = _probe_device_summary()
+    return {
+        "python": {
+            "version": sys.version.split()[0],
+            "platform": platform.platform(),
+        },
+        "process": {
+            "cwd": os.getcwd(),
+        },
+        "paths": {
+            "app": _path_status(Config.BASE_DIR),
+            "runtime": _path_status(Config.RUNTIME_DIR),
+            "uploads": _path_status(Config.UPLOAD_FOLDER),
+            "output": _path_status(Config.OUTPUT_FOLDER),
+            "models": _path_status(os.path.dirname(Config.WEIGHTS_DIR)),
+            "weights": _path_status(Config.WEIGHTS_DIR),
+            "cache": _path_status(Config.CACHE_DIR),
+            "logs": _path_status(Config.LOG_DIR),
+            "config": _path_status(Config.CONFIG_DIR),
+        },
+        "disk": {
+            "runtime": _disk_free_status(Config.RUNTIME_DIR),
+        },
+        "model_manager": {
+            "initialized": _model_manager is not None,
+        },
+        "device": {
+            "current": current_device,
+            "cuda_available": cuda_available,
+        },
+    }
+
+
 def create_app():
     """Create and configure the Flask application."""
     from dotenv import load_dotenv
@@ -997,6 +1061,10 @@ def create_app():
     @app.route("/api/status")
     def model_status():
         return jsonify(_model_status_payload())
+
+    @app.route("/api/diagnostics")
+    def diagnostics():
+        return jsonify(_diagnostics_payload())
 
     @app.route("/api/gpu-info")
     def gpu_info():

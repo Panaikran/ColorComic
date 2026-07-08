@@ -113,6 +113,31 @@ class AppStartupTests(unittest.TestCase):
         self.assertIn("/api/status", flask_app.routes)
         self.assertEqual(flask_app.routes["/api/status"]()["model_loaded"], False)
 
+    def test_diagnostics_reports_runtime_status_without_initializing_model_manager(self):
+        install_fake_flask()
+        fake_torch = types.ModuleType("torch")
+        fake_torch.cuda = types.SimpleNamespace(is_available=lambda: False)
+        sys.modules["torch"] = fake_torch
+        imported = importlib.import_module("app")
+        imported._model_manager = None
+
+        flask_app = imported.create_app()
+        payload = flask_app.routes["/api/diagnostics"]()
+
+        self.assertFalse(payload["model_manager"]["initialized"])
+        self.assertIsNone(imported._model_manager)
+        self.assertIn("runtime", payload["paths"])
+        self.assertIn("uploads", payload["paths"])
+        self.assertIn("output", payload["paths"])
+        self.assertIn("models", payload["paths"])
+        self.assertIn("cache", payload["paths"])
+        self.assertIn("logs", payload["paths"])
+        self.assertIn("config", payload["paths"])
+        self.assertIn("cwd", payload["process"])
+        self.assertIn("version", payload["python"])
+        self.assertIn("free_bytes", payload["disk"]["runtime"])
+        self.assertFalse(payload["device"]["cuda_available"])
+
     def test_create_app_registers_favicon_route(self):
         install_fake_flask()
         imported = importlib.import_module("app")
