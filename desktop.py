@@ -111,6 +111,21 @@ def resolve_output_pdf(job_id: str, output_root: str | None = None) -> str:
     return output_pdf
 
 
+def resolve_logs_folder(log_root: str | None = None, runtime_root: str | None = None) -> str:
+    """Return the ColorComic logs folder, rejecting path escapes."""
+    if log_root is None or runtime_root is None:
+        from config import Config
+
+        log_root = log_root or Config.LOG_DIR
+        runtime_root = runtime_root or Config.RUNTIME_DIR
+
+    logs_folder = os.path.abspath(log_root)
+    expected_logs_root = os.path.abspath(os.path.join(runtime_root, "logs"))
+    if os.path.commonpath([expected_logs_root, logs_folder]) != expected_logs_root:
+        raise ValueError("Logs folder escapes the runtime logs directory")
+    return logs_folder
+
+
 def reveal_in_explorer(path: str) -> None:
     """Reveal *path* in Windows Explorer."""
     subprocess.Popen(["explorer", f"/select,{path}"])
@@ -119,10 +134,19 @@ def reveal_in_explorer(path: str) -> None:
 class DesktopApi:
     """Methods exposed to the pywebview JavaScript bridge."""
 
-    def __init__(self, output_root: str | None = None, opener=None, pdf_revealer=None):
+    def __init__(
+        self,
+        output_root: str | None = None,
+        opener=None,
+        pdf_revealer=None,
+        log_root: str | None = None,
+        runtime_root: str | None = None,
+    ):
         self._output_root = output_root
         self._opener = opener or os.startfile
         self._pdf_revealer = pdf_revealer or reveal_in_explorer
+        self._log_root = log_root
+        self._runtime_root = runtime_root
 
     def open_output_folder(self, job_id: str) -> dict:
         try:
@@ -144,6 +168,20 @@ class DesktopApi:
             return {"ok": True, "path": output_pdf}
         except Exception as exc:
             LOGGER.exception("Failed to reveal output PDF for job %r", job_id)
+            return {"ok": False, "error": str(exc)}
+
+    def open_logs_folder(self) -> dict:
+        try:
+            logs_folder = resolve_logs_folder(
+                log_root=self._log_root,
+                runtime_root=self._runtime_root,
+            )
+            if not os.path.isdir(logs_folder):
+                return {"ok": False, "error": "Logs folder not found.", "path": logs_folder}
+            self._opener(logs_folder)
+            return {"ok": True, "path": logs_folder}
+        except Exception as exc:
+            LOGGER.exception("Failed to open logs folder")
             return {"ok": False, "error": str(exc)}
 
 

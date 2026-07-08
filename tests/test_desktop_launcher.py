@@ -155,6 +155,43 @@ class DesktopLauncherTests(unittest.TestCase):
         self.assertEqual(revealed, [])
         log_exception.assert_called_once()
 
+    def test_resolve_logs_folder_stays_inside_runtime_logs(self):
+        desktop = importlib.import_module("desktop")
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            runtime_root = os.path.join(temp_dir, "ColorComic")
+            logs_root = os.path.join(runtime_root, "logs")
+
+            self.assertEqual(
+                desktop.resolve_logs_folder(log_root=logs_root, runtime_root=runtime_root),
+                os.path.abspath(logs_root),
+            )
+
+            with self.assertRaisesRegex(ValueError, "escapes"):
+                desktop.resolve_logs_folder(
+                    log_root=os.path.join(temp_dir, "outside"),
+                    runtime_root=runtime_root,
+                )
+
+    def test_desktop_api_opens_existing_logs_folder(self):
+        desktop = importlib.import_module("desktop")
+        opened = []
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            runtime_root = os.path.join(temp_dir, "ColorComic")
+            logs_root = os.path.join(runtime_root, "logs")
+            os.makedirs(logs_root)
+            api = desktop.DesktopApi(
+                opener=opened.append,
+                log_root=logs_root,
+                runtime_root=runtime_root,
+            )
+
+            result = api.open_logs_folder()
+
+        self.assertEqual(result["ok"], True)
+        self.assertEqual(opened, [os.path.abspath(logs_root)])
+
     def test_wait_for_backend_returns_when_health_is_ready(self):
         desktop = importlib.import_module("desktop")
 

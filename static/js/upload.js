@@ -138,6 +138,7 @@ const referenceSection = document.getElementById('referenceSection');
 const prefOpenOutputFolder = document.getElementById('prefOpenOutputFolder');
 const savePreferencesBtn = document.getElementById('savePreferencesBtn');
 const resetPreferencesBtn = document.getElementById('resetPreferencesBtn');
+const openLogsFolderBtn = document.getElementById('openLogsFolderBtn');
 const preferencesStatus = document.getElementById('preferencesStatus');
 
 function updateModeSection() {
@@ -187,6 +188,19 @@ function setPreferencesStatus(message, kind) {
     preferencesStatus.textContent = message;
     preferencesStatus.classList.remove('is-success', 'is-error');
     if (kind) preferencesStatus.classList.add(`is-${kind}`);
+}
+
+function canOpenLogsFolder() {
+    return Boolean(
+        window.pywebview
+        && window.pywebview.api
+        && window.pywebview.api.open_logs_folder
+    );
+}
+
+function updateLogsFolderAction() {
+    if (!openLogsFolderBtn) return;
+    openLogsFolderBtn.style.display = canOpenLogsFolder() ? '' : 'none';
 }
 
 function getSelectedPreferenceMode() {
@@ -271,12 +285,36 @@ async function resetPreferences() {
     }
 }
 
+async function openLogsFolder() {
+    if (!openLogsFolderBtn || !canOpenLogsFolder()) return;
+
+    setPreferencesStatus('', '');
+    openLogsFolderBtn.disabled = true;
+    try {
+        const result = await window.pywebview.api.open_logs_folder();
+        if (!result || !result.ok) {
+            throw new Error(result && result.error ? result.error : 'Could not open logs folder.');
+        }
+    } catch (error) {
+        setPreferencesStatus(
+            error && error.message ? error.message : 'Could not open logs folder.',
+            'error',
+        );
+    } finally {
+        openLogsFolderBtn.disabled = false;
+    }
+}
+
 if (savePreferencesBtn) {
     savePreferencesBtn.addEventListener('click', savePreferences);
 }
 
 if (resetPreferencesBtn) {
     resetPreferencesBtn.addEventListener('click', resetPreferences);
+}
+
+if (openLogsFolderBtn) {
+    openLogsFolderBtn.addEventListener('click', openLogsFolder);
 }
 
 // ── Reference Image Upload ──────────────────────────────────────────────────
@@ -1030,5 +1068,7 @@ async function loadRecentOutputs() {
 }
 
 document.addEventListener('pywebviewready', loadRecentOutputs);
+document.addEventListener('pywebviewready', updateLogsFolderAction);
+updateLogsFolderAction();
 loadPreferences();
 loadRecentOutputs();

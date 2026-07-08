@@ -11,7 +11,9 @@ class UploadPreferencesUiTests(unittest.TestCase):
         self.assertIn('id="preferencesSection"', template)
         self.assertIn('id="savePreferencesBtn"', template)
         self.assertIn('id="resetPreferencesBtn"', template)
+        self.assertIn('id="openLogsFolderBtn" style="display:none;"', template)
         self.assertIn("Reset to Defaults", template)
+        self.assertIn("Open Logs", template)
         self.assertIn('name="prefDefaultMode"', template)
         self.assertIn('id="prefOpenOutputFolder"', template)
         self.assertIn('id="preferencesStatus" role="status" aria-live="polite"', template)
@@ -66,6 +68,17 @@ class UploadPreferencesUiTests(unittest.TestCase):
         self.assertIn("applyPreferences(preferences)", script)
         self.assertIn("Preferences reset to defaults.", script)
         self.assertIn("Could not reset preferences.", script)
+
+    def test_upload_script_opens_logs_folder_in_desktop_mode_only(self):
+        root = os.getcwd()
+        with open(os.path.join(root, "static", "js", "upload.js"), encoding="utf-8") as handle:
+            script = handle.read()
+
+        self.assertIn("const openLogsFolderBtn = document.getElementById('openLogsFolderBtn')", script)
+        self.assertIn("window.pywebview.api.open_logs_folder", script)
+        self.assertIn("openLogsFolderBtn.addEventListener('click', openLogsFolder)", script)
+        self.assertIn("document.addEventListener('pywebviewready', updateLogsFolderAction)", script)
+        self.assertIn("openLogsFolderBtn.style.display = canOpenLogsFolder() ? '' : 'none'", script)
 
     def test_upload_script_keeps_defaults_when_preferences_fetch_fails(self):
         root = os.getcwd()
