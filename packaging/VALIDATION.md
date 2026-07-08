@@ -238,13 +238,58 @@ behavior, and permissions issues that a developer machine can hide.
       and `Loading Reference mode model...`.
     - Confirm Reference mode can still finish after the first-run downloads.
 
-17. Failed network download handling:
+17. v0.4.0 workflow polish:
+    - Processing page clarity:
+      - Confirm model download/load messages are visible.
+      - Confirm page progress reads clearly, including completed pages.
+      - Confirm backend errors show the relevant processing step when available.
+      - Confirm interrupted SSE/connection failures show a visible error instead
+        of leaving the spinner active indefinitely.
+    - Recent Outputs removal:
+      - Click **Remove from list** on a completed output.
+      - Expected: the history entry disappears, output files remain on disk, and
+        the list/empty state updates without deleting runtime output folders.
+    - Batch setup preview/removal workflow:
+      - Select multiple PDFs.
+      - Expected: selected filenames, file count, and total size are shown before
+        batch creation.
+      - Remove one selected PDF.
+      - Expected: selected-file count and total size update.
+      - Remove until one PDF remains.
+      - Expected: the upload page returns to the normal single-PDF workflow.
+      - Remove all PDFs.
+      - Expected: file info clears and upload is disabled.
+    - Auto-only batch messaging:
+      - Select multiple PDFs while Reference mode is selected.
+      - Expected: the UI states that batch processing supports Auto mode only,
+        Reference mode is single-PDF only, and batch creation stays disabled
+        until Auto mode is selected.
+    - Preferences reset:
+      - Change preferences, then click **Reset to Defaults**.
+      - Expected: preferences return to normalized defaults, the status message
+        confirms success, and device remains CPU only/read-only.
+      - If the reset API is unavailable, expected: the Preferences panel shows a
+        concise non-blocking error.
+    - Accessibility:
+      - Confirm upload status, batch status/counts, Recent Outputs status/error,
+        and Preferences status are announced through live regions.
+      - Confirm Recent Outputs error text uses alert semantics.
+      - Confirm dynamic buttons such as Download, Show PDF, Open Folder, Remove,
+        and queued-job Cancel have clear accessible names.
+    - Responsive layout smoke checks:
+      - Resize the desktop window to about 900-1200 px wide.
+      - Expected: Recent Outputs actions, batch queue actions, and processing
+        completion actions wrap instead of overflowing.
+      - Expected: long PDF filenames wrap or remain contained while action
+        buttons stay usable.
+
+18. Failed network download handling:
     - Disconnect the network or block access to Google Drive/HuggingFace.
     - Start a colorization job that needs a missing model.
     - Expected: job enters an error state and the UI shows a useful failure
       instead of hanging indefinitely.
 
-18. App close releases process and port:
+19. App close releases process and port:
     - Close the ColorComic window.
     - Confirm `ColorComic.exe` exits.
     - Confirm the localhost listening port is released:
@@ -255,7 +300,7 @@ behavior, and permissions issues that a developer machine can hide.
         Where-Object { $_.OwningProcess -eq <old-process-id> }
       ```
 
-19. SmartScreen/Defender notes:
+20. SmartScreen/Defender notes:
     - Unsigned builds may show Microsoft Defender SmartScreen warnings.
     - Defender may scan or delay first launch because the folder is large and
       contains ML/runtime DLLs.
@@ -285,6 +330,12 @@ Do not publish the one-folder build or installer if any of these fail:
   app.
 - Preferences cannot load/save, exposes GPU/CUDA options, or writes outside
   `%LOCALAPPDATA%\ColorComic\config`.
+- Preferences reset does not restore normalized defaults or fails silently.
+- Processing page status/error clarity regresses or dynamic status text is not
+  exposed to assistive technologies.
+- Recent Outputs removal deletes output files instead of only removing history.
+- Batch selected-file preview/removal, Auto-only batch messaging, or narrow-window
+  action wrapping fails in the packaged app.
 - Model download/loading progress is invisible during first-run auto or
   reference model setup.
 - Closing the window leaves `ColorComic.exe` or the Flask port running.

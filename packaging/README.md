@@ -54,6 +54,17 @@ python -m unittest `
   tests.test_recent_outputs_ui
 ```
 
+Run the v0.4.0 workflow-polish focused tests when validating the current UI
+workflow:
+
+```powershell
+python -m unittest `
+  tests.test_batch_upload_ui `
+  tests.test_recent_outputs_ui `
+  tests.test_upload_preferences_ui `
+  tests.test_responsive_layout_css
+```
+
 ## Build
 
 Expected command:
@@ -201,6 +212,21 @@ For v0.3.0, also verify the batch processing workflow before publishing:
 - Completed batch jobs support Download, Open Folder, and Show PDF actions.
 - Recent Outputs shows batch metadata for batch-origin jobs and preserves
   single-job entries.
+
+For v0.4.0, also verify the workflow polish before publishing:
+
+- Processing page status, progress, completion, and error states are clear.
+- Recent Outputs **Remove from list** removes history only, not output files.
+- Batch setup shows selected PDFs, count, total size, and supports removing
+  selected PDFs before batch creation.
+- Auto-only batch messaging appears before users try to create a Reference-mode
+  batch.
+- Preferences **Reset to Defaults** restores normalized defaults and keeps the
+  device CPU-only/read-only.
+- Upload, batch, Recent Outputs, and Preferences dynamic statuses have live
+  region or alert semantics where appropriate.
+- Recent Outputs actions, batch queue actions, and processing completion actions
+  wrap cleanly in narrow desktop windows around 900-1200 px wide.
 
 Also keep verifying the installer workflow hardening:
 

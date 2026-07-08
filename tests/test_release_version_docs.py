@@ -66,6 +66,25 @@ class ReleaseVersionDocsTests(unittest.TestCase):
 
         self.assertIn('"core.batch_queue"', spec)
 
+    def test_packaging_docs_cover_v040_workflow_validation(self):
+        validation = self.read_file("packaging", "VALIDATION.md")
+        packaging_readme = self.read_file("packaging", "README.md")
+
+        for expected in (
+            "Processing page clarity",
+            "Recent Outputs removal",
+            "Batch setup preview/removal workflow",
+            "Auto-only batch messaging",
+            "Preferences reset",
+            "Accessibility",
+            "Responsive layout smoke checks",
+        ):
+            with self.subTest(expected=expected):
+                self.assertIn(expected, validation)
+
+        self.assertIn("tests.test_responsive_layout_css", packaging_readme)
+        self.assertIn("v0.4.0 workflow-polish focused tests", packaging_readme)
+
 
 if __name__ == "__main__":
     unittest.main()
