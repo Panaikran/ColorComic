@@ -42,7 +42,7 @@ python -m unittest `
   tests.test_upload_preferences_ui
 ```
 
-Run the v0.3.0 batch-focused tests when validating batch builds:
+Run the batch-focused tests when validating batch builds:
 
 ```powershell
 python -m unittest `
@@ -193,7 +193,7 @@ path, and size in MB.
 Expected installer output:
 
 ```text
-packaging\inno\output\ColorComic-Setup-0.3.0-win64-cpu.exe
+packaging\inno\output\ColorComic-Setup-0.4.0-win64-cpu.exe
 ```
 
 The installer copies `dist\ColorComic` into Program Files, creates a Start Menu
@@ -203,7 +203,7 @@ uninstall entry.
 The app, installer, and shortcuts use the shared icon asset at
 `static\img\colorcomic.ico`.
 
-For v0.3.0, also verify the batch processing workflow before publishing:
+Also verify the batch processing workflow before publishing:
 
 - Multi-PDF batch upload accepts valid PDFs and reports per-file preflight
   errors for invalid PDFs.
@@ -247,7 +247,7 @@ Continue to verify the v0.2.0 local workflow hardening:
 - Desktop-only **Open Folder** and **Show PDF** actions open runtime output
   locations.
 
-See `packaging\RELEASE_NOTES.md` for the v0.3.0 release summary.
+See `packaging\RELEASE_NOTES.md` for the v0.4.0 release summary.
 
 Uninstall preserves runtime data by default:
 

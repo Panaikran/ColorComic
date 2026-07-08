@@ -1,5 +1,41 @@
 # ColorComic Release Notes
 
+## v0.4.0 - Workflow Polish and Accessibility
+
+This release improves the Windows CPU desktop workflow without changing model
+behavior, packaging architecture, or local runtime storage.
+
+### Added
+
+- **Reset to Defaults** in Preferences, backed by the local preferences reset
+  API.
+- Selected-PDF preview for batch setup, including file count, total size, and
+  per-file removal before batch creation.
+- Clear Auto-only messaging before users try to create a batch in Reference
+  mode.
+
+### Changed
+
+- Processing page status, progress, completion, and error states are clearer.
+- Recent Outputs can remove a job from local history without deleting output
+  files.
+- Upload, batch, Recent Outputs, and Preferences dynamic status areas now have
+  improved live-region or alert semantics.
+- Recent Outputs actions, batch queue actions, and processing completion actions
+  wrap better in narrow desktop windows.
+- Packaging validation now covers the v0.4.0 workflow polish checks.
+- Installer/package version is now `0.4.0`; expected installer output is
+  `packaging\inno\output\ColorComic-Setup-0.4.0-win64-cpu.exe`.
+
+### Unchanged
+
+- No model behavior changes.
+- No CUDA build.
+- No auto-updater.
+- No cloud features or telemetry.
+- Model weights are still downloaded on first use and are not bundled.
+- Runtime data is still stored under `%LOCALAPPDATA%\ColorComic`.
+
 ## v0.3.0 - Batch Processing and Queue
 
 This release adds conservative Auto-mode batch processing while preserving the

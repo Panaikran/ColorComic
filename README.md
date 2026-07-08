@@ -30,14 +30,13 @@ Automatically colorize black-and-white comic and manga pages using deep learning
 - **Zero cloud dependency** — everything runs locally, no API keys needed
 - **Auto model download** — weights are downloaded automatically on first use
 
-## v0.3.0 Summary
+## v0.4.0 Summary
 
-ColorComic v0.3.0 adds conservative Auto-mode batch processing to the Windows
-CPU desktop app. You can select multiple PDFs, review per-file preflight
-errors, start the batch queue when ready, cancel jobs that have not started,
-and use Download, Open Folder, and Show PDF actions for completed batch jobs.
-Recent Outputs now shows batch metadata for batch-origin jobs while keeping
-single-PDF history unchanged.
+ColorComic v0.4.0 polishes the Windows CPU desktop workflow while preserving
+the existing architecture. Processing feedback is clearer, Recent Outputs can
+remove history entries without deleting files, batch setup now previews and
+removes selected PDFs before creation, Preferences can reset to defaults, and
+dynamic UI areas have better accessibility and narrow-window behavior.
 
 ## How It Works
 
