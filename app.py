@@ -347,8 +347,11 @@ def _run_batch(batch_id: str, runner: SingleWorkerBatchRunner) -> None:
         os.makedirs(out_dir, exist_ok=True)
         try:
             return _run_colorization_job(job_id, job, q, out_dir, batch_id=batch_id)
-        except Exception:
+        except Exception as exc:
             logger.exception("Batch job %s failed before completion", job_id)
+            job.status = "error"
+            job.current_step = getattr(job, "current_step", "") or "batch processing"
+            job.error = str(exc)
             raise
         finally:
             job_queues.pop(job_id, None)

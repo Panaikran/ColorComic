@@ -280,6 +280,45 @@ class QueueApiTests(unittest.TestCase):
         self.assertEqual(app.batches["batch-1"].job_statuses["job-1"], STATUS_COMPLETED)
         self.assertEqual(app.batches["batch-1"].job_statuses["job-2"], STATUS_FAILED)
         self.assertEqual(app.batches["batch-1"].job_statuses["job-3"], STATUS_COMPLETED)
+        self.assertEqual(app.active_batch_runners, {})
+
+    def test_batch_start_marks_job_error_after_unexpected_worker_exception(self):
+        app = self.app_module
+        original_thread = app.threading.Thread
+        original_worker = app._run_colorization_job
+        original_output_folder = app.Config.OUTPUT_FOLDER
+        order = []
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            app.Config.OUTPUT_FOLDER = os.path.join(temp_dir, "output")
+            app.jobs["job-1"] = make_job("job-1", "first.pdf")
+            app.jobs["job-2"] = make_job("job-2", "second.pdf")
+            app.batches["batch-1"] = create_batch("batch-1", ["job-1", "job-2"])
+            app.threading.Thread = ImmediateThread
+
+            def worker(job_id, job, event_queue, out_dir, batch_id=None):
+                order.append(job_id)
+                if job_id == "job-1":
+                    raise RuntimeError("boom")
+                return True
+
+            app._run_colorization_job = worker
+
+            try:
+                response = self.flask_app.routes["/api/batches/<batch_id>/start"]("batch-1")
+            finally:
+                app.threading.Thread = original_thread
+                app._run_colorization_job = original_worker
+                app.Config.OUTPUT_FOLDER = original_output_folder
+
+        self.assertEqual(response["ok"], True)
+        self.assertEqual(order, ["job-1", "job-2"])
+        self.assertEqual(app.jobs["job-1"].status, "error")
+        self.assertEqual(app.jobs["job-1"].error, "boom")
+        self.assertEqual(app.batches["batch-1"].status, STATUS_FAILED)
+        self.assertEqual(app.batches["batch-1"].job_statuses["job-1"], STATUS_FAILED)
+        self.assertEqual(app.batches["batch-1"].job_statuses["job-2"], STATUS_COMPLETED)
+        self.assertEqual(app.active_batch_runners, {})
 
     def test_cancel_queued_batch_job_updates_counts(self):
         app = self.app_module
