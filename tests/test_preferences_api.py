@@ -75,6 +75,10 @@ class PreferencesApiTests(unittest.TestCase):
         self.fake_flask.request._json_payload = payload
         return self.flask_app.routes["/api/preferences"]()
 
+    def call_preferences_reset(self):
+        self.fake_flask.request.method = "POST"
+        return self.flask_app.routes["/api/preferences/reset"]()
+
     def test_get_preferences_returns_defaults_when_file_is_missing(self):
         original_config_dir = self.app_module.Config.CONFIG_DIR
 
@@ -165,6 +169,43 @@ class PreferencesApiTests(unittest.TestCase):
                         self.assertEqual(response["preferences"], DEFAULT_PREFERENCES)
             finally:
                 self.app_module.Config.CONFIG_DIR = original_config_dir
+
+    def test_post_preferences_reset_saves_defaults(self):
+        original_config_dir = self.app_module.Config.CONFIG_DIR
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            save_preferences(
+                {
+                    "default_mode": "reference",
+                    "open_output_folder_after_completion": True,
+                },
+                os.path.join(temp_dir, "preferences.json"),
+            )
+            self.app_module.Config.CONFIG_DIR = temp_dir
+            try:
+                payload = self.call_preferences_reset()
+                saved = load_preferences(os.path.join(temp_dir, "preferences.json"))
+            finally:
+                self.app_module.Config.CONFIG_DIR = original_config_dir
+
+        self.assertEqual(payload, {"preferences": DEFAULT_PREFERENCES})
+        self.assertEqual(saved, DEFAULT_PREFERENCES)
+
+    def test_post_preferences_reset_recovers_from_corrupt_file(self):
+        original_config_dir = self.app_module.Config.CONFIG_DIR
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            with open(os.path.join(temp_dir, "preferences.json"), "w", encoding="utf-8") as handle:
+                handle.write("{bad json")
+            self.app_module.Config.CONFIG_DIR = temp_dir
+            try:
+                payload = self.call_preferences_reset()
+                saved = load_preferences(os.path.join(temp_dir, "preferences.json"))
+            finally:
+                self.app_module.Config.CONFIG_DIR = original_config_dir
+
+        self.assertEqual(payload, {"preferences": DEFAULT_PREFERENCES})
+        self.assertEqual(saved, DEFAULT_PREFERENCES)
 
 
 if __name__ == "__main__":

@@ -93,3 +93,7 @@ def save_preferences(preferences: dict[str, Any], path: str | None = None) -> di
         raise
 
     return normalized
+
+
+def reset_preferences(path: str | None = None) -> dict[str, Any]:
+    return save_preferences(default_preferences(), path)

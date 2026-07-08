@@ -32,7 +32,7 @@ from core.job_history import (
     remove_job_history_entry,
 )
 from core.preflight import validate_colorize_preflight
-from core.preferences import load_preferences, save_preferences
+from core.preferences import load_preferences, reset_preferences, save_preferences
 
 
 jobs = {}
@@ -961,6 +961,10 @@ def create_app():
         preferences_payload = load_preferences()
         preferences_payload.update(updates)
         return jsonify({"preferences": save_preferences(preferences_payload)})
+
+    @app.route("/api/preferences/reset", methods=["POST"])
+    def reset_preferences_api():
+        return jsonify({"preferences": reset_preferences()})
 
     @app.route("/api/health")
     def health():

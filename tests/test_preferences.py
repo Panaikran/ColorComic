@@ -9,6 +9,7 @@ from core.preferences import (
     PREFERENCES_FILENAME,
     get_preferences_path,
     load_preferences,
+    reset_preferences,
     save_preferences,
 )
 
@@ -80,6 +81,17 @@ class PreferencesTests(unittest.TestCase):
         replace.assert_called_once()
         self.assertNotEqual(replace.call_args.args[0], path)
         self.assertEqual(replace.call_args.args[1], path)
+
+    def test_reset_preferences_saves_defaults(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = os.path.join(temp_dir, PREFERENCES_FILENAME)
+            save_preferences({"default_mode": "reference"}, path)
+
+            reset = reset_preferences(path)
+            loaded = load_preferences(path)
+
+        self.assertEqual(reset, DEFAULT_PREFERENCES)
+        self.assertEqual(loaded, DEFAULT_PREFERENCES)
 
 
 if __name__ == "__main__":
