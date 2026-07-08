@@ -10,6 +10,8 @@ class UploadPreferencesUiTests(unittest.TestCase):
 
         self.assertIn('id="preferencesSection"', template)
         self.assertIn('id="savePreferencesBtn"', template)
+        self.assertIn('id="resetPreferencesBtn"', template)
+        self.assertIn("Reset to Defaults", template)
         self.assertIn('name="prefDefaultMode"', template)
         self.assertIn('id="prefOpenOutputFolder"', template)
         self.assertIn('id="preferencesStatus"', template)
@@ -52,6 +54,18 @@ class UploadPreferencesUiTests(unittest.TestCase):
         self.assertIn("open_output_folder_after_completion", script)
         self.assertIn("Preferences saved.", script)
         self.assertIn("Could not save preferences.", script)
+
+    def test_upload_script_resets_preferences_with_explicit_button(self):
+        root = os.getcwd()
+        with open(os.path.join(root, "static", "js", "upload.js"), encoding="utf-8") as handle:
+            script = handle.read()
+
+        self.assertIn("const resetPreferencesBtn = document.getElementById('resetPreferencesBtn')", script)
+        self.assertIn("resetPreferencesBtn.addEventListener('click', resetPreferences)", script)
+        self.assertIn("fetch('/api/preferences/reset', { method: 'POST' })", script)
+        self.assertIn("applyPreferences(preferences)", script)
+        self.assertIn("Preferences reset to defaults.", script)
+        self.assertIn("Could not reset preferences.", script)
 
     def test_upload_script_keeps_defaults_when_preferences_fetch_fails(self):
         root = os.getcwd()

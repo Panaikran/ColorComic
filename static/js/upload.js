@@ -137,6 +137,7 @@ const modeRadios = document.querySelectorAll('input[name="mode"]');
 const referenceSection = document.getElementById('referenceSection');
 const prefOpenOutputFolder = document.getElementById('prefOpenOutputFolder');
 const savePreferencesBtn = document.getElementById('savePreferencesBtn');
+const resetPreferencesBtn = document.getElementById('resetPreferencesBtn');
 const preferencesStatus = document.getElementById('preferencesStatus');
 
 function updateModeSection() {
@@ -245,8 +246,37 @@ async function savePreferences() {
     }
 }
 
+async function resetPreferences() {
+    if (!resetPreferencesBtn) return;
+
+    setPreferencesStatus('Resetting...', '');
+    resetPreferencesBtn.disabled = true;
+    try {
+        const response = await fetch('/api/preferences/reset', { method: 'POST' });
+        const data = await response.json();
+        if (!response.ok) {
+            throw new Error(data && data.error ? data.error : 'Could not reset preferences.');
+        }
+
+        const preferences = data && data.preferences ? data.preferences : {};
+        applyPreferences(preferences);
+        setPreferencesStatus('Preferences reset to defaults.', 'success');
+    } catch (error) {
+        setPreferencesStatus(
+            error && error.message ? error.message : 'Could not reset preferences.',
+            'error',
+        );
+    } finally {
+        resetPreferencesBtn.disabled = false;
+    }
+}
+
 if (savePreferencesBtn) {
     savePreferencesBtn.addEventListener('click', savePreferences);
+}
+
+if (resetPreferencesBtn) {
+    resetPreferencesBtn.addEventListener('click', resetPreferences);
 }
 
 // ── Reference Image Upload ──────────────────────────────────────────────────
