@@ -21,6 +21,7 @@ class JobHistoryEntry:
     output_pdf_path: str
     page_count: int | None = None
     batch_id: str | None = None
+    timing_summary: dict[str, Any] | None = None
 
     def as_dict(self) -> dict[str, Any]:
         payload: dict[str, Any] = {
@@ -34,6 +35,8 @@ class JobHistoryEntry:
             payload["page_count"] = self.page_count
         if self.batch_id:
             payload["batch_id"] = self.batch_id
+        if self.timing_summary:
+            payload["timing_summary"] = self.timing_summary
         return payload
 
     @classmethod
@@ -54,6 +57,10 @@ class JobHistoryEntry:
         if batch_id is not None and (not isinstance(batch_id, str) or not batch_id):
             return None
 
+        timing_summary = payload.get("timing_summary")
+        if timing_summary is not None and not isinstance(timing_summary, dict):
+            timing_summary = None
+
         return cls(
             job_id=payload["job_id"],
             original_filename=payload["original_filename"],
@@ -62,6 +69,7 @@ class JobHistoryEntry:
             output_pdf_path=payload["output_pdf_path"],
             page_count=page_count,
             batch_id=batch_id,
+            timing_summary=timing_summary,
         )
 
 

@@ -26,6 +26,7 @@ class JobHistoryCompletionTests(unittest.TestCase):
                 pdf_path=source_pdf,
                 mode="reference",
                 page_count=4,
+                timing_summary={"steps": [{"name": "model_load"}]},
             )
 
             wrote_history = app._record_completed_job_history(job, output_pdf, history_path)
@@ -39,6 +40,7 @@ class JobHistoryCompletionTests(unittest.TestCase):
         self.assertEqual(entries[0].output_pdf_path, output_pdf)
         self.assertEqual(entries[0].page_count, 4)
         self.assertIsNone(entries[0].batch_id)
+        self.assertEqual(entries[0].timing_summary, {"steps": [{"name": "model_load"}]})
         self.assertTrue(entries[0].completed_at.endswith("Z"))
 
     def test_completed_batch_job_writes_history_with_batch_id(self):
@@ -60,6 +62,7 @@ class JobHistoryCompletionTests(unittest.TestCase):
                 pdf_path=source_pdf,
                 mode="auto",
                 page_count=2,
+                timing_summary={"steps": [{"name": "pdf_export"}]},
             )
 
             wrote_history = app._record_completed_job_history(
@@ -73,6 +76,7 @@ class JobHistoryCompletionTests(unittest.TestCase):
         self.assertTrue(wrote_history)
         self.assertEqual(len(entries), 1)
         self.assertEqual(entries[0].batch_id, "batch-1")
+        self.assertEqual(entries[0].timing_summary, {"steps": [{"name": "pdf_export"}]})
 
     def test_missing_output_pdf_does_not_write_history(self):
         import app
@@ -85,6 +89,7 @@ class JobHistoryCompletionTests(unittest.TestCase):
                 pdf_path=os.path.join(temp_dir, "uploads", "job-123", "comic.pdf"),
                 mode="auto",
                 page_count=1,
+                timing_summary={"steps": [{"name": "model_load"}]},
             )
 
             wrote_history = app._record_completed_job_history(job, output_pdf, history_path)
@@ -104,6 +109,7 @@ class JobHistoryCompletionTests(unittest.TestCase):
                 pdf_path=os.path.join(temp_dir, "uploads", "job-123", "comic.pdf"),
                 mode="auto",
                 page_count=1,
+                timing_summary={"steps": [{"name": "page_colorization"}]},
             )
 
             wrote_history = app._record_completed_job_history(
@@ -129,6 +135,7 @@ class JobHistoryCompletionTests(unittest.TestCase):
                 mode="auto",
                 page_count=1,
                 status="cancelled",
+                timing_summary={"steps": [{"name": "page_colorization"}]},
             )
 
             wrote_history = app._record_completed_job_history(

@@ -217,6 +217,9 @@ def _record_completed_job_history(
     page_count = getattr(job, "page_count", None)
     if not isinstance(page_count, int):
         page_count = None
+    timing_summary = getattr(job, "timing_summary", None)
+    if not isinstance(timing_summary, dict):
+        timing_summary = None
 
     entry = JobHistoryEntry(
         job_id=job.job_id,
@@ -226,6 +229,7 @@ def _record_completed_job_history(
         output_pdf_path=output_pdf,
         page_count=page_count,
         batch_id=batch_id,
+        timing_summary=timing_summary,
     )
     try:
         append_job_history(entry, path=history_path)
@@ -520,6 +524,7 @@ def _run_colorization_job(
         timing_step = None
         job.output_pdf = output_pdf
         timing_step = timing.start_step("history_record")
+        job.timing_summary = timing.summary()
         _record_completed_job_history(job, output_pdf, batch_id=batch_id)
         timing.end_step(timing_step)
         timing_step = None

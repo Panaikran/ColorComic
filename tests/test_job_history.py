@@ -123,11 +123,31 @@ class JobHistoryTests(unittest.TestCase):
         self.assertEqual(payload[0]["batch_id"], "batch-1")
         self.assertEqual(entries, [entry])
 
+    def test_timing_summary_round_trips_when_present(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            path = os.path.join(temp_dir, HISTORY_FILENAME)
+            entry = JobHistoryEntry(
+                **self.make_entry().as_dict(),
+                timing_summary={
+                    "total_duration_seconds": 1.5,
+                    "steps": [{"name": "model_load", "duration_seconds": 0.5}],
+                },
+            )
+
+            save_job_history([entry], path)
+            with open(path, "r", encoding="utf-8") as handle:
+                payload = json.load(handle)
+            entries = load_job_history(path)
+
+        self.assertEqual(payload[0]["timing_summary"], entry.timing_summary)
+        self.assertEqual(entries, [entry])
+
     def test_existing_history_without_batch_id_still_loads(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             path = os.path.join(temp_dir, HISTORY_FILENAME)
             legacy_payload = self.make_entry().as_dict()
             legacy_payload.pop("batch_id", None)
+            legacy_payload.pop("timing_summary", None)
             with open(path, "w", encoding="utf-8") as handle:
                 json.dump([legacy_payload], handle)
 
@@ -135,6 +155,7 @@ class JobHistoryTests(unittest.TestCase):
 
         self.assertEqual(len(entries), 1)
         self.assertIsNone(entries[0].batch_id)
+        self.assertIsNone(entries[0].timing_summary)
 
     def test_remove_history_entry_by_job_id_keeps_other_entries_and_files(self):
         with tempfile.TemporaryDirectory() as temp_dir:
