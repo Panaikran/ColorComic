@@ -635,6 +635,7 @@ input:focus, select:focus, textarea:focus {
     justify-content: space-between;
     gap: 1rem;
     align-items: flex-start;
+    flex-wrap: wrap;
     margin-bottom: 0.75rem;
 }
 
@@ -690,6 +691,7 @@ input:focus, select:focus, textarea:focus {
 
 .recent-output-item {
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     gap: 1rem;
     align-items: center;
@@ -700,6 +702,7 @@ input:focus, select:focus, textarea:focus {
 }
 
 .recent-output-details {
+    flex: 1 1 260px;
     min-width: 0;
 }
 
@@ -723,7 +726,21 @@ input:focus, select:focus, textarea:focus {
     gap: 0.5rem;
     flex-wrap: wrap;
     justify-content: flex-end;
-    flex-shrink: 0;
+    flex: 0 1 auto;
+    max-width: 100%;
+}
+
+.recent-output-actions .btn,
+.processing-actions .btn {
+    justify-content: center;
+    text-align: center;
+    white-space: normal;
+}
+
+.processing-actions {
+    justify-content: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
 }
 
 .spinner {
@@ -756,5 +773,8 @@ input:focus, select:focus, textarea:focus {
     }
     .recent-output-actions {
         justify-content: flex-start;
+    }
+    .processing-actions .btn {
+        flex: 1 1 180px;
     }
 }
