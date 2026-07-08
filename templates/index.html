@@ -126,7 +126,7 @@
             </label>
 
             <p class="text-dim preferences-device">Device: CPU only</p>
-            <p class="text-dim preferences-status" id="preferencesStatus" aria-live="polite"></p>
+            <p class="text-dim preferences-status" id="preferencesStatus" role="status" aria-live="polite"></p>
         </section>
 
         <button class="btn btn-primary mt-2" id="uploadBtn" style="width:100%;" disabled>
@@ -136,7 +136,7 @@
         <div id="uploadProgress" style="display:none;" class="mt-2">
             <div class="progress-bar"><div class="fill" id="uploadFill"></div></div>
             <div class="progress-info">
-                <span id="uploadStatus">Uploading...</span>
+                <span id="uploadStatus" role="status" aria-live="polite">Uploading...</span>
             </div>
         </div>
 
@@ -150,8 +150,8 @@
                     Start Batch
                 </button>
             </div>
-            <p class="text-dim" id="batchStatusText">Processing has not started yet.</p>
-            <div class="batch-counts" id="batchCounts" style="display:none;"></div>
+            <p class="text-dim" id="batchStatusText" role="status" aria-live="polite">Processing has not started yet.</p>
+            <div class="batch-counts" id="batchCounts" role="status" aria-live="polite" style="display:none;"></div>
             <div id="batchAcceptedBlock" style="display:none;">
                 <h4 id="batchAcceptedTitle">Accepted PDFs</h4>
                 <ul id="batchAcceptedList"></ul>
@@ -169,13 +169,13 @@
                 <h2 id="recentOutputsTitle">Recent Outputs</h2>
                 <p class="text-dim">Completed jobs saved on this computer.</p>
             </div>
-            <span class="text-dim" id="recentOutputsStatus">Loading...</span>
+            <span class="text-dim" id="recentOutputsStatus" role="status" aria-live="polite">Loading...</span>
         </div>
         <div class="recent-outputs-list" id="recentOutputsList" style="display:none;"></div>
         <p class="text-dim mt-1" id="recentOutputsEmpty" style="display:none;">
             No completed outputs yet.
         </p>
-        <p class="text-dim mt-1" id="recentOutputsError" style="display:none;">
+        <p class="text-dim mt-1" id="recentOutputsError" role="alert" style="display:none;">
             Could not load recent outputs.
         </p>
     </section>

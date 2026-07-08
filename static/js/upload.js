@@ -525,6 +525,8 @@ function renderBatchJobs(jobs) {
         if (job.status === 'queued') {
             const actionStatus = document.createElement('p');
             actionStatus.className = 'text-dim recent-output-action-status';
+            actionStatus.setAttribute('role', 'status');
+            actionStatus.setAttribute('aria-live', 'polite');
 
             const actions = document.createElement('div');
             actions.className = 'recent-output-actions';
@@ -533,6 +535,7 @@ function renderBatchJobs(jobs) {
             cancel.className = 'btn btn-secondary btn-sm';
             cancel.type = 'button';
             cancel.textContent = 'Cancel';
+            cancel.setAttribute('aria-label', `Cancel ${job.original_filename || job.filename || job.job_id}`);
             cancel.addEventListener('click', () => {
                 cancelQueuedBatchJob(job.job_id, actionStatus, cancel);
             });
@@ -545,6 +548,8 @@ function renderBatchJobs(jobs) {
         if (job.status === 'completed' && job.output_pdf_exists && job.output_pdf_safe) {
             const actionStatus = document.createElement('p');
             actionStatus.className = 'text-dim recent-output-action-status';
+            actionStatus.setAttribute('role', 'status');
+            actionStatus.setAttribute('aria-live', 'polite');
 
             const actions = document.createElement('div');
             actions.className = 'recent-output-actions';
@@ -930,6 +935,8 @@ function renderRecentOutput(job) {
 
     const actionStatus = document.createElement('p');
     actionStatus.className = 'text-dim recent-output-action-status';
+    actionStatus.setAttribute('role', 'status');
+    actionStatus.setAttribute('aria-live', 'polite');
     details.appendChild(actionStatus);
 
     item.appendChild(details);
@@ -942,6 +949,7 @@ function renderRecentOutput(job) {
         download.className = 'btn btn-primary btn-sm';
         download.href = `/api/download/${encodeURIComponent(job.job_id)}`;
         download.textContent = 'Download';
+        download.setAttribute('aria-label', `Download ${title.textContent}`);
         actions.appendChild(download);
 
         if (canOpenOutputPdf()) {
@@ -949,6 +957,7 @@ function renderRecentOutput(job) {
             revealPdf.className = 'btn btn-secondary btn-sm';
             revealPdf.type = 'button';
             revealPdf.textContent = 'Show PDF';
+            revealPdf.setAttribute('aria-label', `Show PDF for ${title.textContent}`);
             revealPdf.addEventListener('click', () => {
                 openRecentOutputPdf(job.job_id, actionStatus, revealPdf);
             });
@@ -960,6 +969,7 @@ function renderRecentOutput(job) {
             openFolder.className = 'btn btn-secondary btn-sm';
             openFolder.type = 'button';
             openFolder.textContent = 'Open Folder';
+            openFolder.setAttribute('aria-label', `Open output folder for ${title.textContent}`);
             openFolder.addEventListener('click', () => {
                 openRecentOutputFolder(job.job_id, actionStatus, openFolder);
             });
@@ -976,6 +986,7 @@ function renderRecentOutput(job) {
     remove.className = 'btn btn-secondary btn-sm';
     remove.type = 'button';
     remove.textContent = 'Remove from list';
+    remove.setAttribute('aria-label', `Remove ${title.textContent} from Recent Outputs`);
     remove.title = 'Removes this history entry only. Output files stay on disk.';
     remove.addEventListener('click', () => {
         removeRecentOutput(job.job_id, item, actionStatus, remove);

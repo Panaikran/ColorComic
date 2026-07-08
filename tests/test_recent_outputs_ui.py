@@ -11,7 +11,8 @@ class RecentOutputsUiTests(unittest.TestCase):
         self.assertIn('id="recentOutputsSection"', template)
         self.assertIn('id="recentOutputsList"', template)
         self.assertIn('id="recentOutputsEmpty"', template)
-        self.assertIn('id="recentOutputsError"', template)
+        self.assertIn('id="recentOutputsStatus" role="status" aria-live="polite"', template)
+        self.assertIn('id="recentOutputsError" role="alert"', template)
         self.assertIn("Recent Outputs", template)
 
     def test_upload_script_loads_recent_jobs_and_supports_desktop_folder_action(self):
@@ -27,6 +28,12 @@ class RecentOutputsUiTests(unittest.TestCase):
         self.assertIn("window.pywebview.api.open_output_folder", script)
         self.assertIn("window.pywebview.api.open_output_pdf", script)
         self.assertIn("Show PDF", script)
+        self.assertIn("download.setAttribute('aria-label', `Download ${title.textContent}`)", script)
+        self.assertIn("revealPdf.setAttribute('aria-label', `Show PDF for ${title.textContent}`)", script)
+        self.assertIn("openFolder.setAttribute('aria-label', `Open output folder for ${title.textContent}`)", script)
+        self.assertIn("remove.setAttribute('aria-label', `Remove ${title.textContent} from Recent Outputs`)", script)
+        self.assertIn("actionStatus.setAttribute('role', 'status')", script)
+        self.assertIn("actionStatus.setAttribute('aria-live', 'polite')", script)
         self.assertIn("/api/download/", script)
         self.assertIn("Remove from list", script)
         self.assertIn("Removes this history entry only. Output files stay on disk.", script)

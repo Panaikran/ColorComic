@@ -14,7 +14,7 @@ class UploadPreferencesUiTests(unittest.TestCase):
         self.assertIn("Reset to Defaults", template)
         self.assertIn('name="prefDefaultMode"', template)
         self.assertIn('id="prefOpenOutputFolder"', template)
-        self.assertIn('id="preferencesStatus"', template)
+        self.assertIn('id="preferencesStatus" role="status" aria-live="polite"', template)
         self.assertIn("Device: CPU only", template)
         self.assertNotIn('name="prefDefaultDevice"', template)
         self.assertNotIn('value="cuda"', template.split('id="preferencesSection"', 1)[1].split('id="uploadBtn"', 1)[0])
