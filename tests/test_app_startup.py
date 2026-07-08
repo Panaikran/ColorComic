@@ -138,6 +138,20 @@ class AppStartupTests(unittest.TestCase):
         self.assertIn("free_bytes", payload["disk"]["runtime"])
         self.assertFalse(payload["device"]["cuda_available"])
 
+    def test_diagnostics_bundle_route_does_not_initialize_model_manager(self):
+        install_fake_flask()
+        imported = importlib.import_module("app")
+        imported._model_manager = None
+
+        flask_app = imported.create_app()
+        response = flask_app.routes["/api/diagnostics/bundle"]()
+
+        self.assertIsNone(imported._model_manager)
+        self.assertEqual(response[0], "send_file")
+        self.assertEqual(response[2]["mimetype"], "application/zip")
+        self.assertTrue(response[2]["as_attachment"])
+        self.assertTrue(response[2]["download_name"].startswith("ColorComic-diagnostics-"))
+
     def test_create_app_registers_favicon_route(self):
         install_fake_flask()
         imported = importlib.import_module("app")

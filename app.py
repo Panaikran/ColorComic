@@ -35,6 +35,7 @@ from core.job_history import (
     remove_job_history_entry,
 )
 from core.job_timing import JobTiming
+from core.diagnostics_bundle import create_diagnostics_bundle
 from core.preflight import validate_colorize_preflight
 from core.preferences import load_preferences, reset_preferences, save_preferences
 
@@ -655,6 +656,10 @@ def _diagnostics_payload() -> dict:
     }
 
 
+def _app_version() -> str:
+    return os.environ.get("COLORCOMIC_VERSION", "0.4.0")
+
+
 def create_app():
     """Create and configure the Flask application."""
     from dotenv import load_dotenv
@@ -1065,6 +1070,20 @@ def create_app():
     @app.route("/api/diagnostics")
     def diagnostics():
         return jsonify(_diagnostics_payload())
+
+    @app.route("/api/diagnostics/bundle")
+    def diagnostics_bundle():
+        bundle_path = create_diagnostics_bundle(
+            _diagnostics_payload(),
+            Config.LOG_DIR,
+            app_version=_app_version(),
+        )
+        return send_file(
+            bundle_path,
+            as_attachment=True,
+            download_name=os.path.basename(bundle_path),
+            mimetype="application/zip",
+        )
 
     @app.route("/api/gpu-info")
     def gpu_info():
