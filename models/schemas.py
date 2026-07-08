@@ -27,6 +27,7 @@ class JobState(BaseModel):
     status: str = "uploaded"
     progress: float = 0.0
     current_step: str = ""
+    timing_summary: Optional[dict] = None
     style: str = "auto"
     device: str = "auto"
     mode: str = "auto"  # "auto" (mc-v2) or "reference" (MangaNinja)

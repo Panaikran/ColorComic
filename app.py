@@ -31,6 +31,7 @@ from core.job_history import (
     load_job_history,
     remove_job_history_entry,
 )
+from core.job_timing import JobTiming
 from core.preflight import validate_colorize_preflight
 from core.preferences import load_preferences, reset_preferences, save_preferences
 
@@ -415,6 +416,8 @@ def _run_colorization_job(
     batch_id: str | None = None,
 ) -> bool:
     current_step = "startup"
+    timing = JobTiming()
+    timing_step = None
     try:
         import cv2
         import torch
@@ -429,12 +432,15 @@ def _run_colorization_job(
 
         current_step = "model load"
         job.current_step = current_step
+        timing_step = timing.start_step("model_load")
         event_queue.put({"status": "model", "step": _model_progress_message(job.mode, current_step)})
         model_manager.switch_device(job.device)
         colorizer = model_manager.get_colorizer(
             job.mode,
             callback=_model_progress_callback(job, event_queue, job.mode),
         )
+        timing.end_step(timing_step)
+        timing_step = None
 
         ref_image = None
         if job.mode == "reference" and job.reference_image_path:
@@ -450,6 +456,7 @@ def _run_colorization_job(
         consistency = ColorConsistencyManager()
         colored_paths = []
 
+        timing_step = timing.start_step("page_colorization")
         with torch.inference_mode():
             for i, img_path in enumerate(job.page_images):
                 current_step = f"page {i + 1} image loading"
@@ -501,17 +508,29 @@ def _run_colorization_job(
                     "status": "done_page",
                     "step": current_step,
                 })
+        timing.end_step(timing_step)
+        timing_step = None
 
         current_step = "PDF export"
         job.current_step = current_step
+        timing_step = timing.start_step("pdf_export")
         output_pdf = os.path.join(out_dir, "colorized.pdf")
         reassemble_pdf(colored_paths, output_pdf, job.pdf_path)
+        timing.end_step(timing_step)
+        timing_step = None
         job.output_pdf = output_pdf
+        timing_step = timing.start_step("history_record")
         _record_completed_job_history(job, output_pdf, batch_id=batch_id)
+        timing.end_step(timing_step)
+        timing_step = None
+        job.timing_summary = timing.summary()
         job.status = "done"
         event_queue.put({"done": True, "download_url": f"/api/download/{job_id}"})
         return True
     except Exception as e:
+        if timing_step is not None:
+            timing.fail_step(timing_step)
+        job.timing_summary = timing.summary()
         if job.mode == "reference":
             logger.exception(
                 "Reference mode colorization failed for job %s during %s",
