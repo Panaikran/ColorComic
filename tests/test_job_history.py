@@ -159,10 +159,10 @@ class JobHistoryTests(unittest.TestCase):
 
             entries = remove_job_history_entry("job-1", path)
             loaded_entries = load_job_history(path)
+            self.assertTrue(os.path.isfile(output_pdf))
 
         self.assertEqual(entries, [keep_me])
         self.assertEqual(loaded_entries, [keep_me])
-        self.assertTrue(os.path.isfile(output_pdf))
 
     def test_remove_missing_history_entry_leaves_history_unchanged(self):
         with tempfile.TemporaryDirectory() as temp_dir:

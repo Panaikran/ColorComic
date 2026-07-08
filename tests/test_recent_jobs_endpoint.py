@@ -239,11 +239,11 @@ class RecentJobsEndpointTests(unittest.TestCase):
             finally:
                 self.app_module.Config.CONFIG_DIR = original_config_dir
                 self.app_module.Config.OUTPUT_FOLDER = original_output_folder
+            self.assertTrue(os.path.isfile(remove_pdf))
+            self.assertTrue(os.path.isfile(keep_pdf))
 
         self.assertEqual(response, {"removed": True, "job_id": "remove-job"})
         self.assertEqual([job["job_id"] for job in payload["jobs"]], ["keep-job"])
-        self.assertTrue(os.path.isfile(remove_pdf))
-        self.assertTrue(os.path.isfile(keep_pdf))
 
     def test_delete_recent_job_missing_entry_is_safe(self):
         original_config_dir = self.app_module.Config.CONFIG_DIR
