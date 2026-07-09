@@ -188,6 +188,23 @@ To verify the packaging-critical imports in a clean CPU desktop environment:
 python scripts/verify_dependency_imports.py
 ```
 
+### Experimental CUDA Development
+
+The official Windows desktop release remains CPU-only. The signed/offline
+packaging path, PyInstaller build, and Inno Setup installer use
+`requirements-windows-cpu.txt`.
+
+Developers who want to test CUDA from source can create a separate virtual
+environment and install the experimental CUDA dependency set:
+
+```bash
+python -m pip install -r requirements-windows-cuda-experimental.txt
+```
+
+This path is unsupported for released installers. It is intended only for local
+developer testing with `python app.py` or `python desktop.py`, and it does not
+enable CUDA in the official CPU installer.
+
 ## Usage
 
 1. **Upload** — Drop a B&W comic/manga PDF onto the upload page

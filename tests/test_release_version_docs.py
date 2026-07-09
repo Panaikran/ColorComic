@@ -85,6 +85,19 @@ class ReleaseVersionDocsTests(unittest.TestCase):
         self.assertIn("tests.test_responsive_layout_css", packaging_readme)
         self.assertIn("v0.4.0 workflow-polish focused tests", packaging_readme)
 
+    def test_cuda_development_path_is_documented_as_experimental(self):
+        root = os.getcwd()
+        readme = self.read_file("README.md")
+        packaging_readme = self.read_file("packaging", "README.md")
+
+        self.assertTrue(os.path.exists(os.path.join(root, "requirements-windows-cuda-experimental.txt")))
+        self.assertIn("Experimental CUDA Development", readme)
+        self.assertIn("official Windows desktop release remains CPU-only", readme)
+        self.assertIn("unsupported for released installers", readme)
+        self.assertIn("requirements-windows-cuda-experimental.txt", readme)
+        self.assertIn("official Windows installer is CPU-only", packaging_readme)
+        self.assertIn("source-based developer CUDA experiments", packaging_readme)
+
 
 if __name__ == "__main__":
     unittest.main()

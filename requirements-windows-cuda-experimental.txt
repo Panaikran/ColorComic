@@ -1,0 +1,43 @@
+# Experimental Windows CUDA development baseline.
+# Source-only developer testing:
+#   python -m pip install -r requirements-windows-cuda-experimental.txt
+#
+# This is not used by the official CPU installer or packaging scripts.
+--extra-index-url https://download.pytorch.org/whl/cu121
+
+# Flask desktop backend
+Flask==3.0.3
+Werkzeug==3.0.3
+Jinja2==3.1.4
+click==8.1.7
+itsdangerous==2.2.0
+blinker==1.8.2
+python-dotenv==1.0.1
+
+# Desktop shell
+pywebview==5.1
+
+# Experimental CUDA PyTorch runtime
+torch==2.3.1+cu121
+torchvision==0.18.1+cu121
+
+# ML/runtime model stack
+diffusers==0.27.2
+transformers==4.40.2
+huggingface-hub==0.23.5
+accelerate==0.28.0
+kornia==0.7.2
+omegaconf==2.3.0
+einops==0.7.0
+gdown==5.2.0
+
+# Image/PDF/data processing
+PyMuPDF==1.24.10
+opencv-contrib-python==4.10.0.84
+numpy==1.26.4
+Pillow==10.4.0
+scipy==1.13.1
+scikit-image==0.24.0
+
+# App data models
+pydantic==2.8.2

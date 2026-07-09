@@ -22,6 +22,10 @@ Verify packaging-critical imports:
 python scripts\verify_dependency_imports.py
 ```
 
+The official Windows installer is CPU-only. `requirements-windows-cuda-experimental.txt`
+exists only for source-based developer CUDA experiments and is not used by
+`build_windows.ps1`, `build_installer.ps1`, PyInstaller, or Inno Setup.
+
 Run the focused tests:
 
 ```powershell
