@@ -112,6 +112,9 @@ class AppStartupTests(unittest.TestCase):
 
     def test_create_app_returns_flask_app_and_health_responds(self):
         install_fake_flask()
+        fake_torch = types.ModuleType("torch")
+        fake_torch.cuda = types.SimpleNamespace(is_available=lambda: False)
+        sys.modules["torch"] = fake_torch
         imported = importlib.import_module("app")
 
         flask_app = imported.create_app()
@@ -149,6 +152,9 @@ class AppStartupTests(unittest.TestCase):
 
     def test_diagnostics_bundle_route_does_not_initialize_model_manager(self):
         install_fake_flask()
+        fake_torch = types.ModuleType("torch")
+        fake_torch.cuda = types.SimpleNamespace(is_available=lambda: False)
+        sys.modules["torch"] = fake_torch
         imported = importlib.import_module("app")
         imported._model_manager = None
 
