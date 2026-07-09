@@ -69,6 +69,7 @@ class ColorizationTimingTests(unittest.TestCase):
         self.original_get_model_manager = self.app.get_model_manager
         self.original_get_post_processor = self.app.get_post_processor
         self.original_record_history = self.app._record_completed_job_history
+        self.original_monotonic = self.app.time.monotonic
         self.app.get_model_manager = lambda: FakeModelManager()
         self.app.get_post_processor = lambda: FakePostProcessor()
         self.app._record_completed_job_history = lambda job, output_pdf, batch_id=None: True
@@ -77,6 +78,7 @@ class ColorizationTimingTests(unittest.TestCase):
         self.app.get_model_manager = self.original_get_model_manager
         self.app.get_post_processor = self.original_get_post_processor
         self.app._record_completed_job_history = self.original_record_history
+        self.app.time.monotonic = self.original_monotonic
         for name, module in self.original_modules.items():
             if module is None:
                 sys.modules.pop(name, None)
@@ -98,6 +100,7 @@ class ColorizationTimingTests(unittest.TestCase):
             status="colorizing",
             progress=0.0,
             current_step="",
+            eta_seconds=None,
             timing_summary=None,
             style="auto",
             device="cpu",
@@ -133,6 +136,42 @@ class ColorizationTimingTests(unittest.TestCase):
         event_keys = [set(event.keys()) for event in self.drain_events(events)]
         self.assertEqual(event_keys[-1], {"done", "download_url"})
         self.assertNotIn("timing_summary", event_keys[-1])
+        self.assertNotIn("eta_seconds", event_keys[1])
+
+    def test_worker_reports_eta_after_completed_pages(self):
+        class FakeClock:
+            def __init__(self):
+                self.value = 100.0
+
+            def monotonic(self):
+                self.value += 1.0
+                return self.value
+
+        self.app.time.monotonic = FakeClock().monotonic
+        with tempfile.TemporaryDirectory() as temp_dir:
+            pdf_path = os.path.join(temp_dir, "input.pdf")
+            page_paths = [
+                os.path.join(temp_dir, "page1.png"),
+                os.path.join(temp_dir, "page2.png"),
+                os.path.join(temp_dir, "page3.png"),
+            ]
+            out_dir = os.path.join(temp_dir, "out")
+            os.makedirs(out_dir)
+            open(pdf_path, "wb").close()
+            for page_path in page_paths:
+                open(page_path, "wb").close()
+            job = self.make_job(pdf_path, page_paths)
+            events = queue.Queue()
+
+            result = self.app._run_colorization_job("job-1", job, events, out_dir)
+
+        self.assertTrue(result)
+        done_page_events = [
+            event for event in self.drain_events(events)
+            if event.get("status") == "done_page"
+        ]
+        self.assertEqual([event["eta_seconds"] for event in done_page_events], [2.0, 1.0, 0.0])
+        self.assertEqual(job.eta_seconds, 0.0)
 
     def test_worker_stores_partial_timing_on_failure(self):
         def fail_history(job, output_pdf, batch_id=None):
@@ -147,13 +186,17 @@ class ColorizationTimingTests(unittest.TestCase):
             open(pdf_path, "wb").close()
             open(page_path, "wb").close()
             job = self.make_job(pdf_path, [page_path])
+            events = queue.Queue()
 
-            result = self.app._run_colorization_job("job-1", job, queue.Queue(), out_dir)
+            result = self.app._run_colorization_job("job-1", job, events, out_dir)
 
         self.assertFalse(result)
         self.assertEqual(job.status, "error")
+        self.assertIsNone(job.eta_seconds)
         self.assertEqual(job.timing_summary["steps"][-1]["name"], "history_record")
         self.assertEqual(job.timing_summary["steps"][-1]["status"], "failed")
+        error_event = self.drain_events(events)[-1]
+        self.assertNotIn("eta_seconds", error_event)
 
 
 if __name__ == "__main__":

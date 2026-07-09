@@ -14,6 +14,7 @@ import queue
 import shutil
 import sys
 import threading
+import time
 import uuid
 from datetime import datetime, timezone
 
@@ -492,6 +493,7 @@ def _run_colorization_job(
         colored_paths = []
 
         timing_step = timing.start_step("page_colorization")
+        page_timing_started_at = time.monotonic()
         with torch.inference_mode():
             for i, img_path in enumerate(job.page_images):
                 current_step = f"page {i + 1} image loading"
@@ -537,12 +539,20 @@ def _run_colorization_job(
                 job.colorized_images.append(out_path)
 
                 job.progress = (i + 1) / job.page_count
-                event_queue.put({
+                completed_pages = i + 1
+                remaining_pages = max(job.page_count - completed_pages, 0)
+                elapsed_seconds = max(time.monotonic() - page_timing_started_at, 0.0)
+                average_page_seconds = elapsed_seconds / completed_pages
+                job.eta_seconds = round(average_page_seconds * remaining_pages, 1)
+                progress_event = {
                     "page": i,
                     "total": job.page_count,
                     "status": "done_page",
                     "step": current_step,
-                })
+                }
+                if job.eta_seconds is not None:
+                    progress_event["eta_seconds"] = job.eta_seconds
+                event_queue.put(progress_event)
         timing.end_step(timing_step)
         timing_step = None
 
@@ -567,6 +577,7 @@ def _run_colorization_job(
         if timing_step is not None:
             timing.fail_step(timing_step)
         job.timing_summary = timing.summary()
+        job.eta_seconds = None
         if job.mode == "reference":
             logger.exception(
                 "Reference mode colorization failed for job %s during %s",
