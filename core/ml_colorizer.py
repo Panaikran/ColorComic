@@ -12,6 +12,7 @@ import torch
 # Make vendor package importable
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from core.device_detection import detect_device_capabilities, is_official_cpu_build, resolve_compute_device
 from vendor.manga_colorization_v2.colorizator import MangaColorizator
 
 
@@ -32,7 +33,8 @@ class MangaColorizer:
                  extractor_path: str = "",
                  denoiser_weights_dir: str = ""):
         self._lock = threading.Lock()
-        self._device = self._resolve_device(device)
+        resolution = self._device_resolution(device)
+        self._device = torch.device(resolution["resolved_device"])
         self._generator_path = generator_path
         self._extractor_path = extractor_path
         self._denoiser_weights_dir = denoiser_weights_dir
@@ -43,15 +45,20 @@ class MangaColorizer:
             denoiser_weights_dir=denoiser_weights_dir,
         )
         self.device_name = str(self._device)
-        self.cuda_available = torch.cuda.is_available()
+        self.cuda_available = bool(resolution["cuda_available"])
+
+    @staticmethod
+    def _device_resolution(device: str) -> dict:
+        capabilities = detect_device_capabilities(torch)
+        return resolve_compute_device(
+            device,
+            capabilities=capabilities,
+            official_cpu_build=is_official_cpu_build(),
+        )
 
     @staticmethod
     def _resolve_device(device: str):
-        if device == "auto":
-            if torch.cuda.is_available():
-                return torch.device("cuda")
-            return torch.device("cpu")
-        return torch.device(device)
+        return torch.device(MangaColorizer._device_resolution(device)["resolved_device"])
 
     def switch_device(self, device: str) -> None:
         """Reload the model on a different device if needed."""
