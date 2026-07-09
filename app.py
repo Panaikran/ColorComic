@@ -617,6 +617,38 @@ def _probe_device_summary():
     return bool(resolution["cuda_available"]), resolution["resolved_device"]
 
 
+def _device_diagnostics_payload(manager=None) -> dict:
+    capabilities = detect_device_capabilities()
+    official_cpu_build = is_official_cpu_build()
+    resolution = resolve_compute_device(
+        Config.ML_DEVICE,
+        capabilities=capabilities,
+        official_cpu_build=official_cpu_build,
+    )
+    payload = {
+        "current": resolution["resolved_device"],
+        "cuda_available": bool(resolution["cuda_available"]),
+        "cuda_preview_enabled": not official_cpu_build,
+        "requested_device": resolution["requested_device"],
+        "default_device": Config.ML_DEVICE,
+        "resolved_device": resolution["resolved_device"],
+        "resolution": resolution,
+        "capabilities": capabilities,
+    }
+
+    if manager is not None:
+        payload["loaded_model_device"] = manager.device_name
+        colorizer = getattr(manager, "_colorizer", None)
+        fallback_reason = (
+            getattr(colorizer, "fallback_reason", None)
+            or getattr(colorizer, "failure_reason", None)
+        )
+        if fallback_reason:
+            payload["fallback_reason"] = fallback_reason
+
+    return payload
+
+
 def _model_status_payload():
     manager = _model_manager
     cuda_available, current_device = _probe_device_summary()
@@ -663,7 +695,7 @@ def _disk_free_status(path: str) -> dict:
 
 
 def _diagnostics_payload() -> dict:
-    cuda_available, current_device = _probe_device_summary()
+    device = _device_diagnostics_payload(_model_manager)
     return {
         "python": {
             "version": sys.version.split()[0],
@@ -689,10 +721,7 @@ def _diagnostics_payload() -> dict:
         "model_manager": {
             "initialized": _model_manager is not None,
         },
-        "device": {
-            "current": current_device,
-            "cuda_available": cuda_available,
-        },
+        "device": device,
     }
 
 

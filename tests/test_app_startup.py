@@ -61,10 +61,12 @@ class AppStartupTests(unittest.TestCase):
             for name in _IMPORT_SENSITIVE_MODULES
         }
         self.original_local_app_data = os.environ.get("LOCALAPPDATA")
+        self.original_cuda_preview = os.environ.get("COLORCOMIC_CUDA_PREVIEW")
         self.local_app_data = os.path.join(os.getcwd(), "tests")
         self.app_data = os.path.join(self.local_app_data, "ColorComic")
         shutil.rmtree(self.app_data, ignore_errors=True)
         os.environ["LOCALAPPDATA"] = self.local_app_data
+        os.environ.pop("COLORCOMIC_CUDA_PREVIEW", None)
 
     def tearDown(self):
         for name in (
@@ -86,6 +88,10 @@ class AppStartupTests(unittest.TestCase):
             os.environ.pop("LOCALAPPDATA", None)
         else:
             os.environ["LOCALAPPDATA"] = self.original_local_app_data
+        if self.original_cuda_preview is None:
+            os.environ.pop("COLORCOMIC_CUDA_PREVIEW", None)
+        else:
+            os.environ["COLORCOMIC_CUDA_PREVIEW"] = self.original_cuda_preview
         shutil.rmtree(self.app_data, ignore_errors=True)
 
     def test_importing_app_has_no_model_side_effects(self):
@@ -149,6 +155,60 @@ class AppStartupTests(unittest.TestCase):
         self.assertIn("version", payload["python"])
         self.assertIn("free_bytes", payload["disk"]["runtime"])
         self.assertFalse(payload["device"]["cuda_available"])
+        self.assertFalse(payload["device"]["cuda_preview_enabled"])
+        self.assertEqual(payload["device"]["requested_device"], "auto")
+        self.assertEqual(payload["device"]["resolved_device"], "cpu")
+        self.assertEqual(payload["device"]["current"], "cpu")
+        self.assertEqual(payload["device"]["capabilities"]["current_default_device"], "cpu")
+        self.assertNotIn("fallback_reason", payload["device"])
+        self.assertNotIn("core.model_manager", sys.modules)
+
+    def test_diagnostics_reports_cuda_preview_capabilities_without_initializing_models(self):
+        install_fake_flask()
+        os.environ["COLORCOMIC_CUDA_PREVIEW"] = "1"
+        fake_torch = types.ModuleType("torch")
+        fake_torch.__version__ = "2.5.1+cu121"
+        fake_torch.version = types.SimpleNamespace(cuda="12.1")
+        fake_torch.cuda = types.SimpleNamespace(
+            is_available=lambda: True,
+            device_count=lambda: 1,
+            get_device_properties=lambda index: types.SimpleNamespace(
+                name="NVIDIA Test GPU",
+                total_memory=8 * 1024**3,
+            ),
+        )
+        sys.modules["torch"] = fake_torch
+        imported = importlib.import_module("app")
+        imported._model_manager = None
+
+        flask_app = imported.create_app()
+        payload = flask_app.routes["/api/diagnostics"]()
+
+        self.assertTrue(payload["device"]["cuda_preview_enabled"])
+        self.assertTrue(payload["device"]["cuda_available"])
+        self.assertEqual(payload["device"]["requested_device"], "auto")
+        self.assertEqual(payload["device"]["resolved_device"], "cpu")
+        self.assertEqual(payload["device"]["capabilities"]["cuda_version"], "12.1")
+        self.assertEqual(payload["device"]["capabilities"]["gpus"][0]["name"], "NVIDIA Test GPU")
+        self.assertIsNone(imported._model_manager)
+        self.assertNotIn("core.model_manager", sys.modules)
+
+    def test_diagnostics_includes_loaded_model_device_and_fallback_reason_when_available(self):
+        install_fake_flask()
+        fake_torch = types.ModuleType("torch")
+        fake_torch.cuda = types.SimpleNamespace(is_available=lambda: False)
+        sys.modules["torch"] = fake_torch
+        imported = importlib.import_module("app")
+        imported._model_manager = types.SimpleNamespace(
+            device_name="cpu",
+            _colorizer=types.SimpleNamespace(fallback_reason="cuda_out_of_memory"),
+        )
+
+        flask_app = imported.create_app()
+        payload = flask_app.routes["/api/diagnostics"]()
+
+        self.assertEqual(payload["device"]["loaded_model_device"], "cpu")
+        self.assertEqual(payload["device"]["fallback_reason"], "cuda_out_of_memory")
 
     def test_diagnostics_bundle_route_does_not_initialize_model_manager(self):
         install_fake_flask()
