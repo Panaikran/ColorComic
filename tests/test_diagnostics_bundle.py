@@ -23,7 +23,7 @@ class DiagnosticsBundleTests(unittest.TestCase):
             with open(os.path.join(log_dir, "colorcomic.log"), "w", encoding="utf-8") as handle:
                 handle.write("small log")
             with open(os.path.join(log_dir, "large.log"), "w", encoding="utf-8") as handle:
-                handle.write("too large")
+                handle.write("too large for the diagnostics bundle")
 
             diagnostics = {
                 "paths": {
