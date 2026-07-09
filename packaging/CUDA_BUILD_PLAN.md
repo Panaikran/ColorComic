@@ -80,15 +80,16 @@ Measure actual `dist\ColorComic` and installer size before any CUDA preview.
 
 ## CUDA Preview Packaging Plan
 
-The CUDA preview packaging path should stay separate from the official CPU installer.
-This is planning only; do not create these files until the CUDA source workflow
-is validated.
+The CUDA preview packaging path should stay separate from the official CPU
+installer. A preflight-only build wrapper may exist before the CUDA spec and
+installer are implemented; do not create the spec or installer files until the
+CUDA source workflow is validated.
 
 Proposed artifact layout:
 
 - CUDA venv: separate from the CPU `.venv`, for example `.venv-cuda`
 - PyInstaller spec: `packaging/ColorComicCudaPreview.spec`
-- build wrapper: `packaging/build_windows_cuda_preview.ps1`
+- preflight build wrapper: `packaging/build_windows_cuda_preview.ps1`
 - Inno Setup script: `packaging/inno/ColorComicCudaPreview.iss`
 - PyInstaller output: `dist/ColorComicCudaPreview`
 - installer output: `ColorComic-Setup-0.6.0-win64-cuda-preview.exe`
@@ -99,6 +100,9 @@ CUDA preview preflight should fail before packaging when:
 - `torch.version.cuda` is missing or `none`
 - `torch.cuda.is_available() is false` on the build validation machine
 - model weights are present in the source tree or would be bundled
+
+The preflight build wrapper must stop before invoking PyInstaller until
+`packaging/ColorComicCudaPreview.spec` exists.
 
 The CPU installer remains official:
 

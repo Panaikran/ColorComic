@@ -140,14 +140,14 @@ class ReleaseVersionDocsTests(unittest.TestCase):
             with self.subTest(expected=expected):
                 self.assertIn(expected, plan)
 
-    def test_cuda_build_plan_documents_preview_packaging_without_files(self):
+    def test_cuda_build_plan_documents_preview_packaging_path(self):
         root = os.getcwd()
         plan = self.read_file("packaging", "CUDA_BUILD_PLAN.md")
 
         for expected in (
             "CUDA Preview Packaging Plan",
-            "planning only",
-            "separate from the official CPU installer",
+            "preflight-only build wrapper",
+            "separate from the official CPU",
             "packaging/ColorComicCudaPreview.spec",
             "packaging/build_windows_cuda_preview.ps1",
             "packaging/inno/ColorComicCudaPreview.iss",
@@ -157,19 +157,41 @@ class ReleaseVersionDocsTests(unittest.TestCase):
             "torch.version.cuda",
             "torch.cuda.is_available() is false",
             "model weights",
+            "stop before invoking PyInstaller",
             "The CPU installer remains official",
             "ColorComic-Setup-{version}-win64-cpu.exe",
         ):
             with self.subTest(expected=expected):
                 self.assertIn(expected, plan)
 
+        self.assertTrue(os.path.exists(os.path.join(root, "packaging", "build_windows_cuda_preview.ps1")))
+
         for parts in (
             ("packaging", "ColorComicCudaPreview.spec"),
-            ("packaging", "build_windows_cuda_preview.ps1"),
             ("packaging", "inno", "ColorComicCudaPreview.iss"),
         ):
             with self.subTest(path=os.path.join(*parts)):
                 self.assertFalse(os.path.exists(os.path.join(root, *parts)))
+
+    def test_cuda_preview_build_script_has_safety_preflights(self):
+        script = self.read_file("packaging", "build_windows_cuda_preview.ps1")
+
+        for expected in (
+            ".venv\\Scripts\\python.exe",
+            "Get-Command python",
+            "Using Python:",
+            "import torch",
+            "detect_device_capabilities",
+            "torch CUDA build",
+            "CUDA available",
+            "CUDA GPU",
+            "CPU-only Torch is not supported",
+            "torch.cuda.is_available() to be true",
+            "ColorComicCudaPreview.spec",
+            "-m PyInstaller packaging\\ColorComicCudaPreview.spec --clean --noconfirm",
+        ):
+            with self.subTest(expected=expected):
+                self.assertIn(expected, script)
 
     def test_packaging_docs_cover_v050_validation_without_cuda_enablement(self):
         validation = self.read_file("packaging", "VALIDATION.md")
