@@ -1,0 +1,58 @@
+"""Lightweight compute capability detection."""
+
+from __future__ import annotations
+
+
+def _base_capabilities() -> dict:
+    return {
+        "current_default_device": "cpu",
+        "cpu_available": True,
+        "cuda_available": False,
+        "cuda_version": None,
+        "gpus": [],
+        "torch_version": None,
+        "cuda_error": None,
+    }
+
+
+def detect_device_capabilities(torch_module=None) -> dict:
+    """Return JSON-serializable compute capabilities without loading models."""
+
+    capabilities = _base_capabilities()
+    if torch_module is None:
+        try:
+            import torch as torch_module
+        except Exception as exc:
+            capabilities["cuda_error"] = str(exc)
+            return capabilities
+
+    capabilities["torch_version"] = getattr(torch_module, "__version__", None)
+    version = getattr(torch_module, "version", None)
+    capabilities["cuda_version"] = getattr(version, "cuda", None)
+
+    cuda = getattr(torch_module, "cuda", None)
+    if cuda is None:
+        return capabilities
+
+    try:
+        capabilities["cuda_available"] = bool(cuda.is_available())
+    except Exception as exc:
+        capabilities["cuda_error"] = str(exc)
+        return capabilities
+
+    if not capabilities["cuda_available"]:
+        return capabilities
+
+    try:
+        device_count = int(cuda.device_count())
+        for index in range(device_count):
+            props = cuda.get_device_properties(index)
+            capabilities["gpus"].append({
+                "index": index,
+                "name": getattr(props, "name", None),
+                "total_memory_bytes": getattr(props, "total_memory", None),
+            })
+    except Exception as exc:
+        capabilities["cuda_error"] = str(exc)
+
+    return capabilities
