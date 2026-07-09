@@ -14,6 +14,11 @@
             <p class="text-dim" style="font-size:0.75rem; margin-top:0.25rem;">
                 Device: <strong>{{ job.device | upper }}</strong>
             </p>
+            {% if job.device | lower == "cpu" %}
+            <p id="cpuProcessingNote" class="text-dim" role="status" aria-live="polite" style="font-size:0.85rem; margin-top:0.5rem;">
+                Running on CPU. Large PDFs may take several minutes.
+            </p>
+            {% endif %}
 
             <div class="progress-bar mt-2"><div class="fill" id="colorFill"></div></div>
             <div class="progress-info" aria-live="polite">
@@ -72,8 +77,16 @@
     const revealOutputPdfBtn = document.getElementById('revealOutputPdfBtn');
     const openOutputFolderBtn = document.getElementById('openOutputFolderBtn');
     const openOutputFolderError = document.getElementById('openOutputFolderError');
+    const cpuProcessingNote = document.getElementById('cpuProcessingNote');
 
     const evtSource = new EventSource(`/api/colorize/${JOB_ID}/stream`);
+
+    function hideProcessingActive() {
+        document.getElementById('processingActive').style.display = 'none';
+        if (cpuProcessingNote) {
+            cpuProcessingNote.style.display = 'none';
+        }
+    }
 
     function configureDesktopOutputFolderButton() {
         if (!window.pywebview || !window.pywebview.api) {
@@ -120,7 +133,7 @@
     };
 
     function showProcessingError(message, step) {
-        document.getElementById('processingActive').style.display = 'none';
+        hideProcessingActive();
         document.getElementById('processingError').style.display = 'block';
         document.getElementById('errorText').textContent = step ? `${step}: ${message}` : message;
     }
@@ -141,7 +154,7 @@
             if (data.download_url) {
                 document.getElementById('downloadPdfBtn').href = data.download_url;
             }
-            document.getElementById('processingActive').style.display = 'none';
+            hideProcessingActive();
             document.getElementById('processingDone').style.display = 'block';
             return;
         }
