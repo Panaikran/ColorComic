@@ -1,8 +1,9 @@
 import os
 import tempfile
+import types
 import unittest
 
-from core.preflight import validate_colorize_preflight
+from core.preflight import validate_colorize_preflight, validate_runtime_health
 
 
 class FakeImage:
@@ -11,6 +12,54 @@ class FakeImage:
 
 
 class PreflightTests(unittest.TestCase):
+    def test_runtime_health_creates_and_accepts_writable_dirs(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = validate_runtime_health(
+                os.path.join(temp_dir, "runtime"),
+                os.path.join(temp_dir, "runtime", "uploads"),
+                os.path.join(temp_dir, "runtime", "output"),
+                os.path.join(temp_dir, "runtime", "logs"),
+                os.path.join(temp_dir, "runtime", "config"),
+                disk_usage_reader=lambda path: types.SimpleNamespace(free=1024, total=2048),
+                min_free_bytes=512,
+            )
+
+        self.assertEqual(result, ())
+
+    def test_runtime_health_reports_unwritable_runtime_dir(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            runtime_path = os.path.join(temp_dir, "runtime")
+            with open(runtime_path, "w", encoding="utf-8") as handle:
+                handle.write("not a directory")
+
+            result = validate_runtime_health(
+                runtime_path,
+                os.path.join(runtime_path, "uploads"),
+                os.path.join(runtime_path, "output"),
+                os.path.join(runtime_path, "logs"),
+                os.path.join(runtime_path, "config"),
+                disk_usage_reader=lambda path: types.SimpleNamespace(free=1024, total=2048),
+                min_free_bytes=512,
+            )
+
+        self.assertIn("runtime_not_writable", {error.code for error in result})
+        self.assertTrue(all(error.step == "runtime preflight" for error in result))
+
+    def test_runtime_health_reports_low_disk_space(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            result = validate_runtime_health(
+                temp_dir,
+                os.path.join(temp_dir, "uploads"),
+                os.path.join(temp_dir, "output"),
+                os.path.join(temp_dir, "logs"),
+                os.path.join(temp_dir, "config"),
+                disk_usage_reader=lambda path: types.SimpleNamespace(free=10, total=2048),
+                min_free_bytes=512,
+            )
+
+        self.assertEqual([error.code for error in result], ["runtime_disk_low"])
+        self.assertEqual(result[0].step, "runtime preflight")
+
     def test_valid_pdf_and_output_path_pass(self):
         with tempfile.TemporaryDirectory() as temp_dir:
             pdf_path = os.path.join(temp_dir, "input.pdf")

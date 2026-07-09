@@ -4,12 +4,16 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import os
+import shutil
 import tempfile
 from typing import Callable
 
 
 PageCountReader = Callable[[str], int]
 ImageReader = Callable[[str], object]
+DiskUsageReader = Callable[[str], object]
+
+MIN_RUNTIME_FREE_BYTES = 512 * 1024 * 1024
 
 
 @dataclass(frozen=True)
@@ -98,6 +102,63 @@ def _check_output_dir(output_folder: str, job_id: str) -> tuple[str | None, list
         )
 
     return output_dir, errors
+
+
+def _check_writable_dir(path: str, code: str, label: str) -> PreflightError | None:
+    try:
+        os.makedirs(path, exist_ok=True)
+        with tempfile.NamedTemporaryFile(prefix=".preflight-", dir=path, delete=True):
+            pass
+    except OSError:
+        return PreflightError(
+            code=code,
+            message=f"ColorComic cannot write to the {label}. Check folder permissions or free space, then try again.",
+            step="runtime preflight",
+        )
+    return None
+
+
+def validate_runtime_health(
+    runtime_dir: str,
+    uploads_dir: str,
+    output_dir: str,
+    logs_dir: str,
+    config_dir: str,
+    min_free_bytes: int = MIN_RUNTIME_FREE_BYTES,
+    disk_usage_reader: DiskUsageReader = shutil.disk_usage,
+) -> tuple[PreflightError, ...]:
+    errors: list[PreflightError] = []
+    for path, code, label in (
+        (runtime_dir, "runtime_not_writable", "runtime folder"),
+        (uploads_dir, "uploads_not_writable", "uploads folder"),
+        (output_dir, "output_not_writable", "output folder"),
+        (logs_dir, "logs_not_writable", "logs folder"),
+        (config_dir, "config_not_writable", "configuration folder"),
+    ):
+        error = _check_writable_dir(path, code, label)
+        if error:
+            errors.append(error)
+
+    try:
+        free_bytes = disk_usage_reader(runtime_dir).free
+    except (AttributeError, OSError):
+        errors.append(
+            PreflightError(
+                code="runtime_disk_unavailable",
+                message="ColorComic could not check available disk space. Restart the app and try again.",
+                step="runtime preflight",
+            )
+        )
+    else:
+        if free_bytes < min_free_bytes:
+            errors.append(
+                PreflightError(
+                    code="runtime_disk_low",
+                    message="ColorComic needs more free disk space before processing. Free some space and try again.",
+                    step="runtime preflight",
+                )
+            )
+    return tuple(errors)
 
 
 def _image_has_valid_dimensions(image) -> bool:

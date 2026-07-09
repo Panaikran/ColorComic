@@ -36,7 +36,7 @@ from core.job_history import (
 )
 from core.job_timing import JobTiming
 from core.diagnostics_bundle import create_diagnostics_bundle
-from core.preflight import validate_colorize_preflight
+from core.preflight import PreflightResult, validate_colorize_preflight, validate_runtime_health
 from core.preferences import load_preferences, reset_preferences, save_preferences
 
 
@@ -86,6 +86,30 @@ def _preflight_error_message(errors) -> str:
     if not messages:
         return "ColorComic could not check the files before processing."
     return "; ".join(messages)
+
+
+def _runtime_health_errors():
+    return validate_runtime_health(
+        Config.RUNTIME_DIR,
+        Config.UPLOAD_FOLDER,
+        Config.OUTPUT_FOLDER,
+        Config.LOG_DIR,
+        Config.CONFIG_DIR,
+    )
+
+
+def _with_runtime_health(preflight):
+    runtime_errors = _runtime_health_errors()
+    if not runtime_errors:
+        return preflight
+    return PreflightResult(
+        ok=False,
+        pdf_path=preflight.pdf_path,
+        output_dir=preflight.output_dir,
+        page_count=preflight.page_count,
+        reference_image_path=preflight.reference_image_path,
+        errors=runtime_errors + preflight.errors,
+    )
 
 
 def _model_progress_message(mode: str, message: str) -> str:
@@ -814,6 +838,7 @@ def create_app():
                     Config.OUTPUT_FOLDER,
                     mode="auto",
                 )
+                preflight = _with_runtime_health(preflight)
                 if not preflight.ok:
                     for error in preflight.errors:
                         errors.append({
@@ -974,6 +999,7 @@ def create_app():
             mode=getattr(job, "mode", "auto"),
             reference_image_path=getattr(job, "reference_image_path", None),
         )
+        preflight = _with_runtime_health(preflight)
         if not preflight.ok:
             current_step = preflight.errors[0].step if preflight.errors else "preflight"
             job.status = "error"

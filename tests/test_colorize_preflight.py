@@ -6,6 +6,8 @@ import tempfile
 import types
 import unittest
 
+from core.preflight import PreflightError, PreflightResult
+
 
 class FakeConfig(dict):
     def from_object(self, obj):
@@ -184,6 +186,70 @@ class ColorizePreflightRouteTests(unittest.TestCase):
         self.assertIs(worker_call["event_queue"], scheduled_queue)
         self.assertEqual(worker_call["out_dir"], expected_out_dir)
         self.assertNotIn(job_id, app.job_queues)
+
+    def test_runtime_health_failure_stops_before_model_load(self):
+        app = self.app_module
+        model_load_called = {"value": False}
+
+        def fail_if_model_loads():
+            model_load_called["value"] = True
+            raise AssertionError("model manager should not be created")
+
+        original_get_model_manager = app.get_model_manager
+        original_preflight = app.validate_colorize_preflight
+        original_runtime_health = app._runtime_health_errors
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            pdf_path = os.path.join(temp_dir, "input.pdf")
+            with open(pdf_path, "wb") as handle:
+                handle.write(b"%PDF-1.4\n")
+
+            job_id = "runtime-health-fail"
+            app.jobs[job_id] = types.SimpleNamespace(
+                job_id=job_id,
+                pdf_path=pdf_path,
+                status="uploaded",
+                progress=0.0,
+                current_step="",
+                mode="auto",
+                output_pdf=None,
+            )
+            app.get_model_manager = fail_if_model_loads
+            app.validate_colorize_preflight = lambda *args, **kwargs: PreflightResult(
+                ok=True,
+                pdf_path=pdf_path,
+                output_dir=os.path.join(temp_dir, "output", job_id),
+                page_count=1,
+                reference_image_path=None,
+                errors=(),
+            )
+            app._runtime_health_errors = lambda: (
+                PreflightError(
+                    code="runtime_disk_low",
+                    message="ColorComic needs more free disk space before processing. Free some space and try again.",
+                    step="runtime preflight",
+                ),
+            )
+
+            try:
+                response = self.flask_app.routes["/api/colorize/<job_id>"](job_id)
+                stream_response = self.flask_app.routes["/api/colorize/<job_id>/stream"](job_id)
+                generator = stream_response[1][0]
+                payload = json.loads(next(generator).removeprefix("data: ").strip())
+            finally:
+                app.get_model_manager = original_get_model_manager
+                app.validate_colorize_preflight = original_preflight
+                app._runtime_health_errors = original_runtime_health
+
+        self.assertEqual(response, {"ok": True})
+        self.assertFalse(model_load_called["value"])
+        self.assertEqual(app.jobs[job_id].status, "error")
+        self.assertEqual(payload["done"], True)
+        self.assertEqual(payload["step"], "runtime preflight")
+        self.assertEqual(
+            payload["error"],
+            "ColorComic needs more free disk space before processing. Free some space and try again.",
+        )
 
     def test_reference_preflight_failure_stops_before_model_load(self):
         app = self.app_module
