@@ -15,6 +15,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from core.device_detection import detect_device_capabilities, is_official_cpu_build, resolve_compute_device
+
 
 # ── Minimal RRDBNet architecture ─────────────────────────────────────────────
 
@@ -162,9 +164,13 @@ class Upscaler:
         self._lock = threading.Lock()
 
     def _resolve_device(self):
-        if self._device_str == "auto":
-            return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        return torch.device(self._device_str)
+        capabilities = detect_device_capabilities(torch)
+        resolution = resolve_compute_device(
+            self._device_str,
+            capabilities=capabilities,
+            official_cpu_build=is_official_cpu_build(),
+        )
+        return torch.device(resolution["resolved_device"])
 
     def _ensure_weights(self):
         if os.path.exists(self._model_path):

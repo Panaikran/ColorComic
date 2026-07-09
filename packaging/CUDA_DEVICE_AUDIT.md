@@ -15,7 +15,8 @@ preview wiring. It does not enable CUDA or change runtime behavior.
 - With `official_cpu_build=False`, `auto` still resolves to CPU, while explicit
   `cuda` resolves to CUDA only when CUDA is available.
 
-No model-loading path currently calls `resolve_compute_device()`.
+Model-loading paths now call `resolve_compute_device()` for ModelManager,
+Auto mode, Reference mode, and optional ESRGAN upscaling.
 
 ## Device Selection Call Sites
 
@@ -40,21 +41,19 @@ No model-loading path currently calls `resolve_compute_device()`.
 
 ### `core/model_manager.py`
 
-- `cuda_available` directly returns `torch.cuda.is_available()`.
-- `_resolve_device()` directly returns `torch.device("cuda")` for `auto` when
-  CUDA is available, otherwise CPU.
+- `cuda_available` and `_resolve_device()` use `detect_device_capabilities()`
+  and `resolve_compute_device()`.
 - `switch_device()` stores the requested string and reloads any active model.
-- `_load_mcv2()` passes the raw stored device string into `MangaColorizer`.
-- `_load_manganinja()` passes the raw stored device string into
+- `_load_mcv2()` passes the resolved device string into `MangaColorizer`.
+- `_load_manganinja()` passes the resolved device string into
   `MangaNinjaColorizer`.
 - `_flush_vram()` directly calls `torch.cuda.empty_cache()` when CUDA is
   available.
 
 ### `core/ml_colorizer.py`
 
-- `_resolve_device()` directly chooses CUDA for `auto` when
-  `torch.cuda.is_available()`.
-- Explicit device strings are passed directly to `torch.device()`.
+- `_resolve_device()` uses `detect_device_capabilities()` and
+  `resolve_compute_device()`.
 - Auto mode has one CUDA fallback: if colorization raises a `RuntimeError`
   containing `out of memory` and the current device is not CPU, it clears CUDA
   cache, reloads the model on CPU, and retries the page.
@@ -62,9 +61,8 @@ No model-loading path currently calls `resolve_compute_device()`.
 
 ### `core/manga_ninja_colorizer.py`
 
-- `_resolve_device()` directly chooses CUDA for `auto` when
-  `torch.cuda.is_available()`.
-- Explicit device strings are passed directly to `torch.device()`.
+- `_resolve_device()` uses `detect_device_capabilities()` and
+  `resolve_compute_device()`.
 - CUDA mode uses `torch.float16`; CPU mode uses `torch.float32`.
 - Reference mode does not currently retry on CPU after CUDA OOM or CUDA runtime
   failure.
@@ -72,33 +70,36 @@ No model-loading path currently calls `resolve_compute_device()`.
 
 ### `core/upscaler.py`
 
-- `_resolve_device()` directly chooses CUDA for `auto` when
-  `torch.cuda.is_available()`.
+- `_resolve_device()` uses `detect_device_capabilities()` and
+  `resolve_compute_device()`.
 - Optional ESRGAN upscaling uses half precision on CUDA.
-- It does not currently use `resolve_compute_device()`.
+- It does not currently retry on CPU after CUDA OOM.
 
 ## Current CPU Fallback Behavior
 
 Auto mode:
 
-- Source/runtime `auto` can select CUDA when a CUDA-capable Torch build reports
-  CUDA available.
+- Official CPU builds resolve Auto mode to CPU.
+- In a future CUDA preview runtime, `auto` still resolves to CPU, while explicit
+  `cuda` can select CUDA when a CUDA-capable Torch build reports CUDA available.
 - If a CUDA page colorization call raises an OOM `RuntimeError`, Auto mode
   reloads the Auto colorizer on CPU and retries that page.
 - Non-OOM CUDA errors are re-raised.
 
 Reference mode:
 
-- Source/runtime `auto` can select CUDA when a CUDA-capable Torch build reports
-  CUDA available.
+- Official CPU builds resolve Reference mode to CPU.
+- In a future CUDA preview runtime, `auto` still resolves to CPU, while explicit
+  `cuda` can select CUDA when a CUDA-capable Torch build reports CUDA available.
 - CUDA uses float16 for the pipeline.
 - There is no explicit CPU retry for CUDA OOM or partial pipeline-load failure.
 - Failures flow through the existing colorization error path.
 
 Optional ESRGAN upscaler:
 
-- Source/runtime `auto` can select CUDA when a CUDA-capable Torch build reports
-  CUDA available.
+- Official CPU builds resolve the optional upscaler to CPU.
+- In a future CUDA preview runtime, `auto` still resolves to CPU, while explicit
+  `cuda` can select CUDA when a CUDA-capable Torch build reports CUDA available.
 - There is no explicit CPU retry on CUDA OOM.
 
 ## CPU-Only Packaging Assumptions
@@ -116,9 +117,8 @@ Optional ESRGAN upscaler:
   installer CPU-only and recommend a separate CUDA preview installer if CUDA
   ships later.
 
-The official CPU build is CPU-only because of its dependency file and packaging
-pipeline, not because runtime model-loading paths consult
-`resolve_compute_device()`.
+The official CPU build is CPU-only because of its dependency file, packaging
+pipeline, and the runtime preview switch defaulting to official CPU behavior.
 
 ## Bypass Summary
 
@@ -126,15 +126,15 @@ Already centralized:
 
 - `core/device_detection.py`
 - `tests/test_device_detection.py`
-
-Bypasses centralized resolution:
-
-- `app.py` `_probe_device_summary()`
-- `app.py` `/api/gpu-info`
+- `app.py` device status
 - `core/model_manager.py`
 - `core/ml_colorizer.py`
 - `core/manga_ninja_colorizer.py`
 - `core/upscaler.py`
+
+Bypasses centralized resolution:
+
+- `app.py` `/api/gpu-info`
 
 ## Phase 2 Wiring Order
 
@@ -152,7 +152,7 @@ Bypasses centralized resolution:
 6. Update `MangaNinjaColorizer._resolve_device()` after Auto mode is covered,
    because Reference mode has heavier VRAM and no CPU retry today.
 7. Update `Upscaler._resolve_device()` last, because it is optional and only
-   active when ESRGAN is enabled.
+   active when ESRGAN is enabled. Completed in Phase 1 Slice 5.
 8. Add mocked tests proving:
    - official CPU builds never resolve CUDA
    - CUDA preview builds can resolve explicit CUDA
