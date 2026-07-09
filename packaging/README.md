@@ -70,6 +70,21 @@ python -m unittest `
   tests.test_responsive_layout_css
 ```
 
+Run the v0.5.0 diagnostics, robustness, timing, and device-groundwork tests
+when validating the current release candidate:
+
+```powershell
+python -m unittest `
+  tests.test_job_timing `
+  tests.test_colorization_timing `
+  tests.test_app_startup `
+  tests.test_diagnostics_bundle `
+  tests.test_colorize_preflight `
+  tests.test_runtime_cleanup `
+  tests.test_device_detection `
+  tests.test_release_version_docs
+```
+
 ## Build
 
 Expected command:
@@ -138,13 +153,27 @@ Confirm:
 - Runtime folders are created under `%LOCALAPPDATA%\ColorComic`.
 - Model weights are not downloaded until starting an actual colorization job.
 - `/api/preferences` and `/api/recent-jobs` respond in the packaged app.
+- `/api/diagnostics` returns safe runtime status without model initialization.
+- `/api/diagnostics/bundle` creates a local support ZIP without uploads,
+  outputs, model weights, or cache files.
 - Preflight errors stop before model loading/download.
+- Runtime health preflight reports unwritable folders or low disk before long
+  processing starts.
 - Recent Outputs lists completed jobs and handles missing outputs.
 - Preferences load/save under `%LOCALAPPDATA%\ColorComic\config`.
 - Desktop-only Open Folder / Show PDF output actions work for completed jobs.
 - Multi-PDF batch upload, Start Batch, queue status polling, queued-job
   cancellation, completed batch output actions, and Recent Outputs batch
   metadata work in the packaged app.
+- Processing records job timing, shows page-based ETA only after completed
+  pages, and hides stale ETA on failures.
+- CPU processing guidance is visible while CPU processing is active and hidden
+  on completion or error.
+- Orphaned upload cleanup remains conservative and does not remove outputs,
+  logs, preferences, model weights, or Recent Outputs history.
+- Device capability detection and compute resolution remain CPU-safe: the
+  official build resolves to CPU, Preferences stay CPU-only/read-only, and no
+  CUDA installer is implied.
 
 ## Installer
 
@@ -232,6 +261,25 @@ For v0.4.0, also verify the workflow polish before publishing:
   region or alert semantics where appropriate.
 - Recent Outputs actions, batch queue actions, and processing completion actions
   wrap cleanly in narrow desktop windows around 900-1200 px wide.
+
+For v0.5.0, also verify diagnostics and robustness before publishing:
+
+- Job timing summaries are recorded for successful jobs and remain
+  backward-compatible with existing Recent Outputs history.
+- Page-based ETA appears after completed pages, reaches zero at completion, and
+  is absent from error payloads.
+- CPU guidance says large PDFs may take several minutes during processing only.
+- `/api/diagnostics` reports runtime path, platform, disk, model-manager, and
+  device status without loading models.
+- Diagnostics bundle export includes diagnostics JSON and small logs only.
+- Runtime health preflight catches unwritable runtime folders and low disk
+  before model loading.
+- Orphaned runtime cleanup only removes old abandoned upload/intermediate data.
+- `core\device_detection.py` reports CUDA capability safely and
+  `resolve_compute_device()` keeps the official CPU build on CPU.
+- `requirements-windows-cuda-experimental.txt` and
+  `packaging\CUDA_BUILD_PLAN.md` are documented as source/developer planning
+  only; the supported installer remains CPU-only.
 
 Also keep verifying the installer workflow hardening:
 

@@ -118,6 +118,42 @@ class ReleaseVersionDocsTests(unittest.TestCase):
 
         self.assertIn("packaging\\CUDA_BUILD_PLAN.md", packaging_readme)
 
+    def test_packaging_docs_cover_v050_validation_without_cuda_enablement(self):
+        validation = self.read_file("packaging", "VALIDATION.md")
+        packaging_readme = self.read_file("packaging", "README.md")
+
+        for expected in (
+            "Job timing",
+            "page-based ETA",
+            "CPU guidance",
+            "/api/diagnostics",
+            "/api/diagnostics/bundle",
+            "Runtime health preflight",
+            "Orphan cleanup",
+            "Device capability",
+            "compute resolution",
+            "requirements-windows-cuda-experimental.txt",
+            "CUDA installer exists",
+            "GPU is selectable in Preferences",
+        ):
+            with self.subTest(expected=expected):
+                self.assertIn(expected, validation)
+
+        for expected in (
+            "v0.5.0 diagnostics, robustness, timing, and device-groundwork tests",
+            "tests.test_job_timing",
+            "tests.test_diagnostics_bundle",
+            "tests.test_runtime_cleanup",
+            "tests.test_device_detection",
+            "official build resolves to CPU",
+            "supported installer remains CPU-only",
+        ):
+            with self.subTest(expected=expected):
+                self.assertIn(expected, packaging_readme)
+
+        self.assertNotIn("CUDA installer is supported", packaging_readme)
+        self.assertNotIn("GPU is selectable in Preferences", packaging_readme)
+
 
 if __name__ == "__main__":
     unittest.main()

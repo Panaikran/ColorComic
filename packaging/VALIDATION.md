@@ -209,6 +209,11 @@ behavior, and permissions issues that a developer machine can hide.
 14. Tiny one-page PDF processing:
     - Process a one-page PDF in auto mode.
     - Confirm the processing page receives progress updates.
+    - Confirm page-based ETA is not shown before a page completes.
+    - Confirm page-based ETA appears after completed pages and reaches zero at
+      completion.
+    - Confirm the CPU guidance message says large PDFs may take several minutes
+      while processing is active.
     - Confirm preview image loads.
     - Confirm Download PDF works in the desktop window.
     - Confirm the downloaded filename is source-aware, for example
@@ -220,7 +225,52 @@ behavior, and permissions issues that a developer machine can hide.
       `%LOCALAPPDATA%\ColorComic\output\<job_id>\colorized.pdf` in Explorer.
     - Confirm output files are under `%LOCALAPPDATA%\ColorComic\output`.
 
-15. Recent Outputs:
+15. Diagnostics:
+    - Open:
+
+      ```powershell
+      Invoke-RestMethod http://127.0.0.1:<port>/api/diagnostics
+      ```
+
+      Expected: runtime path status, platform/Python details, disk free space,
+      model-manager status, and device status are returned without downloading
+      or loading models.
+    - Open:
+
+      ```text
+      http://127.0.0.1:<port>/api/diagnostics/bundle
+      ```
+
+      Expected: a `ColorComic-diagnostics-*.zip` download is created under the
+      runtime logs area.
+    - Inspect the ZIP.
+      Expected: it contains diagnostics JSON and small log files only. It must
+      not contain uploads, output PDFs, model weights, HuggingFace cache files,
+      or user PDFs.
+
+16. Runtime robustness:
+    - Confirm runtime health preflight catches unwritable `uploads`, `output`,
+      `logs`, or `config` folders before model loading begins, where practical
+      on the test account.
+    - Confirm low-disk preflight behavior in a controlled environment if
+      practical.
+    - Create old abandoned upload/intermediate data in the runtime uploads area.
+      Expected: orphan cleanup removes only old abandoned upload/intermediate
+      files and never removes outputs, logs, preferences, model weights, cache,
+      or Recent Outputs history.
+
+17. Device groundwork:
+    - Confirm device capability detection reports CPU availability and does not
+      initialize models.
+    - Confirm the official CPU build resolves compute selection to CPU even if
+      CUDA-capable hardware exists.
+    - Confirm Preferences remain CPU-only/read-only and expose no GPU/CUDA
+      selection.
+    - Confirm `requirements-windows-cuda-experimental.txt` and
+      `packaging\CUDA_BUILD_PLAN.md` are documentation/developer-only and do
+      not imply that a CUDA installer exists.
+
+18. Recent Outputs:
     - Return to the upload page after at least one successful job.
     - Confirm Recent Outputs lists newest-first completed jobs.
     - Confirm each available safe output shows Download.
@@ -231,14 +281,14 @@ behavior, and permissions issues that a developer machine can hide.
     - If the job history file is missing or corrupt, expected: Recent Outputs
       shows the empty state or a non-blocking load failure, not a startup crash.
 
-16. Reference-mode first-run progress:
+19. Reference-mode first-run progress:
     - Upload a PDF with a colored reference page.
     - Confirm the processing page shows visible messages such as
       `Downloading MangaNinja weights...`, `Loading SD 1.5 components...`,
       and `Loading Reference mode model...`.
     - Confirm Reference mode can still finish after the first-run downloads.
 
-17. v0.4.0 workflow polish:
+20. v0.4.0 workflow polish:
     - Processing page clarity:
       - Confirm model download/load messages are visible.
       - Confirm page progress reads clearly, including completed pages.
@@ -283,13 +333,34 @@ behavior, and permissions issues that a developer machine can hide.
       - Expected: long PDF filenames wrap or remain contained while action
         buttons stay usable.
 
-18. Failed network download handling:
+21. v0.5.0 workflow and robustness polish:
+    - Job timing:
+      - Process at least one successful auto job.
+      - Expected: completed jobs keep timing summaries in local history when
+        available, while older history entries without timing still load.
+    - ETA:
+      - Confirm no ETA appears before the first completed page.
+      - Confirm ETA is visible on progress after completed pages.
+      - Confirm completion and error payload behavior is unchanged.
+    - CPU processing guidance:
+      - Confirm the CPU guidance note appears only during active CPU
+        processing and hides on completion or error.
+    - Runtime diagnostics:
+      - Confirm `/api/diagnostics` and `/api/diagnostics/bundle` work in the
+        packaged app without model downloads.
+    - Runtime cleanup:
+      - Confirm cleanup is conservative and preserves user outputs and history.
+    - Device capability and resolution:
+      - Confirm CPU-only compute resolution remains the supported release path.
+      - Confirm CUDA documentation is clearly experimental/source-only.
+
+22. Failed network download handling:
     - Disconnect the network or block access to Google Drive/HuggingFace.
     - Start a colorization job that needs a missing model.
     - Expected: job enters an error state and the UI shows a useful failure
       instead of hanging indefinitely.
 
-19. App close releases process and port:
+23. App close releases process and port:
     - Close the ColorComic window.
     - Confirm `ColorComic.exe` exits.
     - Confirm the localhost listening port is released:
@@ -300,7 +371,7 @@ behavior, and permissions issues that a developer machine can hide.
         Where-Object { $_.OwningProcess -eq <old-process-id> }
       ```
 
-20. SmartScreen/Defender notes:
+24. SmartScreen/Defender notes:
     - Unsigned builds may show Microsoft Defender SmartScreen warnings.
     - Defender may scan or delay first launch because the folder is large and
       contains ML/runtime DLLs.
@@ -333,6 +404,17 @@ Do not publish the one-folder build or installer if any of these fail:
 - Preferences reset does not restore normalized defaults or fails silently.
 - Processing page status/error clarity regresses or dynamic status text is not
   exposed to assistive technologies.
+- Job timing, page-based ETA, or CPU processing guidance regresses.
+- `/api/diagnostics` or diagnostics bundle export initializes models, includes
+  user uploads/outputs/model weights/cache data, or fails in the packaged app.
+- Runtime health preflight allows long processing to start when runtime folders
+  are unwritable or disk space is critically low.
+- Orphan cleanup removes outputs, logs, preferences, model weights, cache, or
+  Recent Outputs history.
+- Device capability detection or compute resolution implies CUDA is officially
+  supported in the CPU installer.
+- Experimental CUDA documentation implies a CUDA installer exists, CUDA is
+  officially supported, or GPU is selectable in Preferences.
 - Recent Outputs removal deletes output files instead of only removing history.
 - Batch selected-file preview/removal, Auto-only batch messaging, or narrow-window
   action wrapping fails in the packaged app.
