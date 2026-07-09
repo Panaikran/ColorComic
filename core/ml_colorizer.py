@@ -1,6 +1,7 @@
 """ML-based manga/comic colorization using manga-colorization-v2."""
 
 import gc
+import logging
 import sys
 import os
 import threading
@@ -14,6 +15,8 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from core.device_detection import detect_device_capabilities, is_official_cpu_build, resolve_compute_device
 from vendor.manga_colorization_v2.colorizator import MangaColorizator
+
+logger = logging.getLogger(__name__)
 
 
 class MangaColorizer:
@@ -46,6 +49,7 @@ class MangaColorizer:
         )
         self.device_name = str(self._device)
         self.cuda_available = bool(resolution["cuda_available"])
+        self.fallback_reason = None
 
     @staticmethod
     def _device_resolution(device: str) -> dict:
@@ -59,6 +63,43 @@ class MangaColorizer:
     @staticmethod
     def _resolve_device(device: str):
         return torch.device(MangaColorizer._device_resolution(device)["resolved_device"])
+
+    @staticmethod
+    def _cuda_failure_reason(exc: RuntimeError) -> str | None:
+        message = str(exc).lower()
+        if "out of memory" in message:
+            return "cuda_out_of_memory"
+        if "cuda" in message and any(
+            token in message
+            for token in ("runtime", "driver", "device-side", "illegal memory", "launch failed")
+        ):
+            return "cuda_runtime_failure"
+        return None
+
+    @staticmethod
+    def _clear_cuda_cache() -> None:
+        try:
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except RuntimeError:
+            logger.warning("Unable to clear CUDA cache during Auto mode fallback", exc_info=True)
+
+    def _fallback_to_cpu(self, reason: str) -> None:
+        logger.warning("Auto mode falling back to CPU after %s", reason)
+        self.fallback_reason = reason
+        if self._model is not None:
+            del self._model
+            self._model = None
+        gc.collect()
+        self._clear_cuda_cache()
+        self._device = torch.device("cpu")
+        self._model = MangaColorizator(
+            device=self._device,
+            generator_path=self._generator_path,
+            extractor_path=self._extractor_path,
+            denoiser_weights_dir=self._denoiser_weights_dir,
+        )
+        self.device_name = "cpu"
 
     def switch_device(self, device: str) -> None:
         """Reload the model on a different device if needed."""
@@ -74,6 +115,7 @@ class MangaColorizer:
                 denoiser_weights_dir=self._denoiser_weights_dir,
             )
             self.device_name = str(self._device)
+            self.fallback_reason = None
 
     def colorize(self, image: np.ndarray, size: int = 576) -> np.ndarray:
         """Colorize a single B&W page image.
@@ -101,17 +143,9 @@ class MangaColorizer:
                     self._model.set_image(rgb, size=size, apply_denoise=True)
                     result = self._model.colorize()
             except RuntimeError as exc:
-                if "out of memory" in str(exc).lower() and self.device_name != "cpu":
-                    # OOM fallback: retry on CPU
-                    torch.cuda.empty_cache()
-                    self._device = torch.device("cpu")
-                    self._model = MangaColorizator(
-                        device=self._device,
-                        generator_path=self._generator_path,
-                        extractor_path=self._extractor_path,
-                        denoiser_weights_dir=self._denoiser_weights_dir,
-                    )
-                    self.device_name = "cpu"
+                reason = self._cuda_failure_reason(exc)
+                if reason and self.device_name != "cpu":
+                    self._fallback_to_cpu(reason)
                     with torch.inference_mode():
                         self._model.set_image(rgb, size=size, apply_denoise=True)
                         result = self._model.colorize()
@@ -138,5 +172,4 @@ class MangaColorizer:
                 del self._model
                 self._model = None
             gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+            self._clear_cuda_cache()
