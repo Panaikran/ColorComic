@@ -6,6 +6,9 @@ import types
 import unittest
 
 
+_MISSING = object()
+
+
 class FakeConfig(dict):
     def from_object(self, obj):
         self["from_object"] = obj
@@ -52,6 +55,7 @@ def install_fake_flask():
 
 class AppStartupTests(unittest.TestCase):
     def setUp(self):
+        self.original_torch_module = sys.modules.get("torch", _MISSING)
         self.original_local_app_data = os.environ.get("LOCALAPPDATA")
         self.local_app_data = os.path.join(os.getcwd(), "tests")
         self.app_data = os.path.join(self.local_app_data, "ColorComic")
@@ -65,7 +69,6 @@ class AppStartupTests(unittest.TestCase):
             "core.paths",
             "flask",
             "dotenv",
-            "torch",
             "cv2",
             "diffusers",
             "transformers",
@@ -73,6 +76,10 @@ class AppStartupTests(unittest.TestCase):
             "core.model_downloader",
         ):
             sys.modules.pop(name, None)
+        if self.original_torch_module is _MISSING:
+            sys.modules.pop("torch", None)
+        else:
+            sys.modules["torch"] = self.original_torch_module
         if self.original_local_app_data is None:
             os.environ.pop("LOCALAPPDATA", None)
         else:
