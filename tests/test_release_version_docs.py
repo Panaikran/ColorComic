@@ -119,6 +119,27 @@ class ReleaseVersionDocsTests(unittest.TestCase):
 
         self.assertIn("packaging\\CUDA_BUILD_PLAN.md", packaging_readme)
 
+    def test_cuda_build_plan_documents_source_validation_workflow(self):
+        plan = self.read_file("packaging", "CUDA_BUILD_PLAN.md")
+
+        for expected in (
+            "Source-Mode CUDA Validation Workflow",
+            "developer/source validation only",
+            "official Windows installer remains CPU-only",
+            "requirements-windows-cuda-experimental.txt",
+            "scripts\\verify_dependency_imports.py",
+            "torch CUDA build",
+            "CUDA available",
+            "CUDA GPU",
+            "tests.test_verify_dependency_imports",
+            "tiny one-page PDF",
+            "Reference mode only when VRAM is sufficient",
+            "Force CPU fallback behavior on a CUDA machine",
+            "Do not publish CUDA artifacts",
+        ):
+            with self.subTest(expected=expected):
+                self.assertIn(expected, plan)
+
     def test_packaging_docs_cover_v050_validation_without_cuda_enablement(self):
         validation = self.read_file("packaging", "VALIDATION.md")
         packaging_readme = self.read_file("packaging", "README.md")

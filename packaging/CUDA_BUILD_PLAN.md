@@ -78,6 +78,78 @@ Measure actual `dist\ColorComic` and installer size before any CUDA preview.
 - Run a packaged smoke test on a machine with a compatible NVIDIA driver.
 - Verify CPU fallback still works when CUDA is unavailable or fails at runtime.
 
+## Source-Mode CUDA Validation Workflow
+
+This workflow is for developer/source validation only. It does not validate or
+ship an official CUDA installer. The official Windows installer remains CPU-only.
+
+1. Create a clean CUDA test virtual environment from the repo root:
+
+   ```powershell
+   py -3.11 -m venv .venv-cuda
+   .\.venv-cuda\Scripts\python.exe -m pip install --upgrade pip
+   ```
+
+2. Install the experimental source-mode dependencies:
+
+   ```powershell
+   .\.venv-cuda\Scripts\python.exe -m pip install -r requirements-windows-cuda-experimental.txt
+   ```
+
+3. Verify dependency imports and CUDA facts:
+
+   ```powershell
+   .\.venv-cuda\Scripts\python.exe scripts\verify_dependency_imports.py
+   ```
+
+   Expected checks:
+
+   - `torch` version is reported.
+   - `torch CUDA build` reports the CUDA build version, not `none`.
+   - `CUDA available` is `True`.
+   - At least one `CUDA GPU` line shows a GPU name.
+   - Total VRAM is reported for available GPUs when Torch exposes it.
+
+4. Run the focused device/CUDA groundwork tests:
+
+   ```powershell
+   .\.venv-cuda\Scripts\python.exe -m unittest tests.test_device_detection tests.test_app_startup tests.test_ml_colorizer_device tests.test_manga_ninja_colorizer_device tests.test_upscaler_device tests.test_verify_dependency_imports
+   ```
+
+5. Manually validate Auto mode on CUDA from source with a tiny one-page PDF:
+
+   ```powershell
+   $env:COLORCOMIC_CUDA_PREVIEW = "1"
+   $env:COLORCOMIC_DEVICE = "cuda"
+   .\.venv-cuda\Scripts\python.exe app.py
+   ```
+
+   Expected: Auto mode can process the tiny PDF, diagnostics report CUDA
+   capability, and any CUDA fallback reason is visible through diagnostics if a
+   fallback occurs.
+
+6. Validate Reference mode only when VRAM is sufficient:
+
+   - Minimum guidance: 8 GB VRAM; 12 GB+ preferred.
+   - Use a tiny PDF and a small reference image.
+   - Confirm CUDA failures are reported clearly and do not silently retry on
+     CPU.
+
+7. Force CPU fallback behavior on a CUDA machine:
+
+   ```powershell
+   $env:COLORCOMIC_CUDA_PREVIEW = "1"
+   $env:COLORCOMIC_DEVICE = "cpu"
+   .\.venv-cuda\Scripts\python.exe app.py
+   ```
+
+   Expected: processing remains on CPU even though CUDA is available. The
+   official CPU behavior must remain unchanged.
+
+Record the driver version, GPU model, VRAM, Torch version, Torch CUDA build,
+and whether Auto/Reference validation passed. Do not publish CUDA artifacts
+from this workflow.
+
 ## Hardware Guidance
 
 Minimum guidance for any future CUDA preview:
