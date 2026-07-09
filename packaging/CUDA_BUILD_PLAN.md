@@ -78,6 +78,36 @@ Measure actual `dist\ColorComic` and installer size before any CUDA preview.
 - Run a packaged smoke test on a machine with a compatible NVIDIA driver.
 - Verify CPU fallback still works when CUDA is unavailable or fails at runtime.
 
+## CUDA Preview Packaging Plan
+
+The CUDA preview packaging path should stay separate from the official CPU installer.
+This is planning only; do not create these files until the CUDA source workflow
+is validated.
+
+Proposed artifact layout:
+
+- CUDA venv: separate from the CPU `.venv`, for example `.venv-cuda`
+- PyInstaller spec: `packaging/ColorComicCudaPreview.spec`
+- build wrapper: `packaging/build_windows_cuda_preview.ps1`
+- Inno Setup script: `packaging/inno/ColorComicCudaPreview.iss`
+- PyInstaller output: `dist/ColorComicCudaPreview`
+- installer output: `ColorComic-Setup-0.6.0-win64-cuda-preview.exe`
+
+CUDA preview preflight should fail before packaging when:
+
+- the active environment has a CPU-only Torch wheel
+- `torch.version.cuda` is missing or `none`
+- `torch.cuda.is_available() is false` on the build validation machine
+- model weights are present in the source tree or would be bundled
+
+The CPU installer remains official:
+
+- `packaging/ColorComic.spec`
+- `packaging/build_windows.ps1`
+- `packaging/inno/ColorComic.iss`
+- `dist/ColorComic`
+- `ColorComic-Setup-{version}-win64-cpu.exe`
+
 ## Source-Mode CUDA Validation Workflow
 
 This workflow is for developer/source validation only. It does not validate or

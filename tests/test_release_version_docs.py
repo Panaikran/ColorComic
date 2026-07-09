@@ -140,6 +140,37 @@ class ReleaseVersionDocsTests(unittest.TestCase):
             with self.subTest(expected=expected):
                 self.assertIn(expected, plan)
 
+    def test_cuda_build_plan_documents_preview_packaging_without_files(self):
+        root = os.getcwd()
+        plan = self.read_file("packaging", "CUDA_BUILD_PLAN.md")
+
+        for expected in (
+            "CUDA Preview Packaging Plan",
+            "planning only",
+            "separate from the official CPU installer",
+            "packaging/ColorComicCudaPreview.spec",
+            "packaging/build_windows_cuda_preview.ps1",
+            "packaging/inno/ColorComicCudaPreview.iss",
+            "dist/ColorComicCudaPreview",
+            "ColorComic-Setup-0.6.0-win64-cuda-preview.exe",
+            "CPU-only Torch wheel",
+            "torch.version.cuda",
+            "torch.cuda.is_available() is false",
+            "model weights",
+            "The CPU installer remains official",
+            "ColorComic-Setup-{version}-win64-cpu.exe",
+        ):
+            with self.subTest(expected=expected):
+                self.assertIn(expected, plan)
+
+        for parts in (
+            ("packaging", "ColorComicCudaPreview.spec"),
+            ("packaging", "build_windows_cuda_preview.ps1"),
+            ("packaging", "inno", "ColorComicCudaPreview.iss"),
+        ):
+            with self.subTest(path=os.path.join(*parts)):
+                self.assertFalse(os.path.exists(os.path.join(root, *parts)))
+
     def test_packaging_docs_cover_v050_validation_without_cuda_enablement(self):
         validation = self.read_file("packaging", "VALIDATION.md")
         packaging_readme = self.read_file("packaging", "README.md")
