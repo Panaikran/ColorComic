@@ -15,6 +15,8 @@ import numpy as np
 import PIL.Image
 import torch
 
+from core.device_detection import detect_device_capabilities, is_official_cpu_build, resolve_compute_device
+
 
 class MangaNinjaColorizer:
     """Reference-based manga colorization using MangaNinja (CVPR 2025).
@@ -27,20 +29,28 @@ class MangaNinjaColorizer:
 
     def __init__(self, device: str = "auto", config=None, callback=None):
         self._lock = threading.Lock()
-        self._device = self._resolve_device(device)
+        resolution = self._device_resolution(device)
+        self._device = torch.device(resolution["resolved_device"])
         self._config = config
         self._callback = callback or print
         self._pipeline = None
         self.device_name = str(self._device)
-        self.cuda_available = torch.cuda.is_available()
+        self.cuda_available = bool(resolution["cuda_available"])
 
         self._load_pipeline()
 
     @staticmethod
+    def _device_resolution(device: str) -> dict:
+        capabilities = detect_device_capabilities(torch)
+        return resolve_compute_device(
+            device,
+            capabilities=capabilities,
+            official_cpu_build=is_official_cpu_build(),
+        )
+
+    @staticmethod
     def _resolve_device(device: str):
-        if device == "auto":
-            return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        return torch.device(device)
+        return torch.device(MangaNinjaColorizer._device_resolution(device)["resolved_device"])
 
     def _load_pipeline(self):
         """Load the full MangaNinja pipeline."""
