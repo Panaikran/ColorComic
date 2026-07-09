@@ -10,6 +10,7 @@ import threading
 import torch
 
 from config import Config
+from core.device_detection import detect_device_capabilities, is_official_cpu_build, resolve_compute_device
 from core.ml_colorizer import MangaColorizer
 
 
@@ -42,12 +43,18 @@ class ModelManager:
 
     @property
     def cuda_available(self) -> bool:
-        return torch.cuda.is_available()
+        return bool(self._device_resolution()["cuda_available"])
 
     def _resolve_device(self):
-        if self._device == "auto":
-            return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        return torch.device(self._device)
+        return torch.device(self._device_resolution()["resolved_device"])
+
+    def _device_resolution(self) -> dict:
+        capabilities = detect_device_capabilities()
+        return resolve_compute_device(
+            self._device,
+            capabilities=capabilities,
+            official_cpu_build=is_official_cpu_build(),
+        )
 
     def get_colorizer(self, mode: str = "auto", callback=None):
         """Return the colorizer for *mode*, loading it if necessary.
@@ -116,7 +123,7 @@ class ModelManager:
         progress = callback or print
         ensure_models_downloaded(Config.WEIGHTS_DIR, callback=progress)
         colorizer = MangaColorizer(
-            device=self._device,
+            device=str(self._resolve_device()),
             generator_path=Config.GENERATOR_WEIGHTS_PATH,
             extractor_path=Config.EXTRACTOR_WEIGHTS_PATH,
             denoiser_weights_dir=Config.DENOISER_WEIGHTS_DIR,
@@ -132,7 +139,7 @@ class ModelManager:
         progress = callback or print
         ensure_manganinja_downloaded(Config, callback=progress)
         colorizer = MangaNinjaColorizer(
-            device=self._device,
+            device=str(self._resolve_device()),
             config=Config,
             callback=progress,
         )

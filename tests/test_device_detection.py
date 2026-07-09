@@ -2,7 +2,12 @@ import json
 import types
 import unittest
 
-from core.device_detection import detect_device_capabilities, resolve_compute_device
+from core.device_detection import (
+    CUDA_PREVIEW_ENV,
+    detect_device_capabilities,
+    is_official_cpu_build,
+    resolve_compute_device,
+)
 
 
 class DeviceDetectionTests(unittest.TestCase):
@@ -224,6 +229,19 @@ class DeviceDetectionTests(unittest.TestCase):
                 )
                 self.assertEqual(result["resolved_device"], "cpu")
                 self.assertEqual(result["fallback_reason"], "official_cpu_build")
+
+    def test_runtime_switch_defaults_to_official_cpu_build(self):
+        self.assertTrue(is_official_cpu_build({}))
+
+    def test_runtime_switch_accepts_cuda_preview_values(self):
+        for value in ("1", "true", "TRUE", "yes", "on"):
+            with self.subTest(value=value):
+                self.assertFalse(is_official_cpu_build({CUDA_PREVIEW_ENV: value}))
+
+    def test_runtime_switch_keeps_cpu_build_for_disabled_values(self):
+        for value in ("", "0", "false", "no", "off"):
+            with self.subTest(value=value):
+                self.assertTrue(is_official_cpu_build({CUDA_PREVIEW_ENV: value}))
 
 
 if __name__ == "__main__":

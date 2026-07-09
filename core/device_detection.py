@@ -2,6 +2,19 @@
 
 from __future__ import annotations
 
+import os
+
+
+CUDA_PREVIEW_ENV = "COLORCOMIC_CUDA_PREVIEW"
+
+
+def is_official_cpu_build(env=None) -> bool:
+    """Return True unless the future CUDA preview runtime is explicitly enabled."""
+
+    values = os.environ if env is None else env
+    value = str(values.get(CUDA_PREVIEW_ENV, "")).strip().lower()
+    return value not in {"1", "true", "yes", "on"}
+
 
 def _base_capabilities() -> dict:
     return {

@@ -37,6 +37,7 @@ from core.job_history import (
 )
 from core.job_timing import JobTiming
 from core.diagnostics_bundle import create_diagnostics_bundle
+from core.device_detection import detect_device_capabilities, is_official_cpu_build, resolve_compute_device
 from core.preflight import PreflightResult, validate_colorize_preflight, validate_runtime_health
 from core.preferences import load_preferences, reset_preferences, save_preferences
 
@@ -607,17 +608,13 @@ def _run_colorization_job(
 
 def _probe_device_summary():
     """Return best-effort device info without touching model weights."""
-    try:
-        import torch
-    except Exception:
-        return False, Config.ML_DEVICE
-
-    cuda_available = torch.cuda.is_available()
-    if Config.ML_DEVICE == "auto":
-        current_device = "cuda" if cuda_available else "cpu"
-    else:
-        current_device = Config.ML_DEVICE
-    return cuda_available, current_device
+    capabilities = detect_device_capabilities()
+    resolution = resolve_compute_device(
+        Config.ML_DEVICE,
+        capabilities=capabilities,
+        official_cpu_build=is_official_cpu_build(),
+    )
+    return bool(resolution["cuda_available"]), resolution["resolved_device"]
 
 
 def _model_status_payload():
