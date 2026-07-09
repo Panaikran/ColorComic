@@ -16,7 +16,7 @@ class FakeInferenceMode:
 
 
 class FakeColorizer:
-    def colorize(self, image):
+    def colorize(self, image, reference_image=None):
         return image
 
 
@@ -34,6 +34,11 @@ class FakePostProcessor:
 
 
 class FakeConsistency:
+    created_count = 0
+
+    def __init__(self):
+        FakeConsistency.created_count += 1
+
     def set_reference(self, result):
         self.reference = result
 
@@ -50,7 +55,13 @@ class ColorizationTimingTests(unittest.TestCase):
         fake_cv2 = types.ModuleType("cv2")
         fake_cv2.IMWRITE_JPEG_QUALITY = 1
         fake_cv2.imread = lambda path: b"image"
-        fake_cv2.imwrite = lambda path, result, options=None: True
+        self.imwrite_options = []
+
+        def fake_imwrite(path, result, options=None):
+            self.imwrite_options.append(options)
+            return True
+
+        fake_cv2.imwrite = fake_imwrite
         sys.modules["cv2"] = fake_cv2
 
         fake_torch = types.ModuleType("torch")
@@ -58,6 +69,7 @@ class ColorizationTimingTests(unittest.TestCase):
         sys.modules["torch"] = fake_torch
 
         fake_consistency = types.ModuleType("core.color_consistency")
+        FakeConsistency.created_count = 0
         fake_consistency.ColorConsistencyManager = FakeConsistency
         sys.modules["core.color_consistency"] = fake_consistency
 
@@ -89,7 +101,7 @@ class ColorizationTimingTests(unittest.TestCase):
         with open(output_pdf, "wb") as handle:
             handle.write(b"%PDF-1.4\n")
 
-    def make_job(self, pdf_path, page_images):
+    def make_job(self, pdf_path, page_images, mode="auto", reference_image_path=None):
         return types.SimpleNamespace(
             job_id="job-1",
             pdf_path=pdf_path,
@@ -104,8 +116,8 @@ class ColorizationTimingTests(unittest.TestCase):
             timing_summary=None,
             style="auto",
             device="cpu",
-            mode="auto",
-            reference_image_path=None,
+            mode=mode,
+            reference_image_path=reference_image_path,
         )
 
     def drain_events(self, events):
@@ -172,6 +184,50 @@ class ColorizationTimingTests(unittest.TestCase):
         ]
         self.assertEqual([event["eta_seconds"] for event in done_page_events], [2.0, 1.0, 0.0])
         self.assertEqual(job.eta_seconds, 0.0)
+
+    def test_worker_reuses_jpeg_options_for_each_page(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            pdf_path = os.path.join(temp_dir, "input.pdf")
+            page_paths = [
+                os.path.join(temp_dir, "page1.png"),
+                os.path.join(temp_dir, "page2.png"),
+                os.path.join(temp_dir, "page3.png"),
+            ]
+            out_dir = os.path.join(temp_dir, "out")
+            os.makedirs(out_dir)
+            open(pdf_path, "wb").close()
+            for page_path in page_paths:
+                open(page_path, "wb").close()
+            job = self.make_job(pdf_path, page_paths)
+
+            result = self.app._run_colorization_job("job-1", job, queue.Queue(), out_dir)
+
+        self.assertTrue(result)
+        self.assertEqual(len(self.imwrite_options), 3)
+        self.assertIs(self.imwrite_options[0], self.imwrite_options[1])
+        self.assertIs(self.imwrite_options[1], self.imwrite_options[2])
+
+    def test_reference_mode_skips_unused_color_consistency_manager(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            pdf_path = os.path.join(temp_dir, "input.pdf")
+            page_path = os.path.join(temp_dir, "page.png")
+            ref_path = os.path.join(temp_dir, "reference.png")
+            out_dir = os.path.join(temp_dir, "out")
+            os.makedirs(out_dir)
+            open(pdf_path, "wb").close()
+            open(page_path, "wb").close()
+            open(ref_path, "wb").close()
+            job = self.make_job(
+                pdf_path,
+                [page_path],
+                mode="reference",
+                reference_image_path=ref_path,
+            )
+
+            result = self.app._run_colorization_job("job-1", job, queue.Queue(), out_dir)
+
+        self.assertTrue(result)
+        self.assertEqual(FakeConsistency.created_count, 0)
 
     def test_worker_stores_partial_timing_on_failure(self):
         def fail_history(job, output_pdf, batch_id=None):

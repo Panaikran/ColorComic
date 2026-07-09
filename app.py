@@ -478,8 +478,13 @@ def _run_colorization_job(
         timing.end_step(timing_step)
         timing_step = None
 
+        use_reference_mode = job.mode == "reference"
+        use_auto_mode = job.mode == "auto"
+        jpeg_options = [cv2.IMWRITE_JPEG_QUALITY, 85]
+        color_transfer_strength = Config.COLOR_TRANSFER_STRENGTH
+
         ref_image = None
-        if job.mode == "reference" and job.reference_image_path:
+        if use_reference_mode and job.reference_image_path:
             current_step = "reference preprocessing"
             job.current_step = current_step
             ref_image = _read_image_or_raise(
@@ -489,7 +494,7 @@ def _run_colorization_job(
                 cv2_module=cv2,
             )
 
-        consistency = ColorConsistencyManager()
+        consistency = ColorConsistencyManager() if use_auto_mode else None
         colored_paths = []
 
         timing_step = timing.start_step("page_colorization")
@@ -513,7 +518,7 @@ def _run_colorization_job(
                 )
                 current_step = f"page {i + 1} colorization"
                 job.current_step = current_step
-                if job.mode == "reference":
+                if use_reference_mode:
                     result = colorizer.colorize(image, reference_image=ref_image)
                 else:
                     result = colorizer.colorize(image)
@@ -522,7 +527,7 @@ def _run_colorization_job(
                 job.current_step = current_step
                 result = post_processor.process(result, image)
 
-                if job.mode == "auto":
+                if use_auto_mode:
                     current_step = f"page {i + 1} color consistency"
                     job.current_step = current_step
                     if i == 0:
@@ -530,11 +535,11 @@ def _run_colorization_job(
                     else:
                         result = consistency.apply(
                             result,
-                            strength=Config.COLOR_TRANSFER_STRENGTH,
+                            strength=color_transfer_strength,
                         )
 
                 out_path = os.path.join(out_dir, f"colored_{i:04d}.jpg")
-                cv2.imwrite(out_path, result, [cv2.IMWRITE_JPEG_QUALITY, 85])
+                cv2.imwrite(out_path, result, jpeg_options)
                 colored_paths.append(out_path)
                 job.colorized_images.append(out_path)
 
