@@ -56,3 +56,42 @@ def detect_device_capabilities(torch_module=None) -> dict:
         capabilities["cuda_error"] = str(exc)
 
     return capabilities
+
+
+def resolve_compute_device(
+    requested_device: str | None = "auto",
+    *,
+    capabilities: dict | None = None,
+    official_cpu_build: bool = True,
+    torch_module=None,
+) -> dict:
+    """Resolve a requested compute device without changing runtime state."""
+
+    requested = (requested_device or "auto").lower()
+    if requested not in {"auto", "cpu", "cuda"}:
+        requested = "auto"
+
+    if capabilities is None:
+        capabilities = detect_device_capabilities(torch_module)
+
+    cuda_available = bool(capabilities.get("cuda_available"))
+    resolved = "cpu"
+    fallback_reason = None
+
+    if official_cpu_build:
+        fallback_reason = "official_cpu_build"
+    elif requested == "auto":
+        fallback_reason = "auto_defaults_to_cpu"
+    elif requested == "cuda":
+        if cuda_available:
+            resolved = "cuda"
+        else:
+            fallback_reason = "cuda_unavailable"
+
+    return {
+        "requested_device": requested,
+        "resolved_device": resolved,
+        "cuda_available": cuda_available,
+        "official_cpu_build": bool(official_cpu_build),
+        "fallback_reason": fallback_reason,
+    }

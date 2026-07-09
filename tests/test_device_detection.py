@@ -2,7 +2,7 @@ import json
 import types
 import unittest
 
-from core.device_detection import detect_device_capabilities
+from core.device_detection import detect_device_capabilities, resolve_compute_device
 
 
 class DeviceDetectionTests(unittest.TestCase):
@@ -71,6 +71,65 @@ class DeviceDetectionTests(unittest.TestCase):
         )
 
         json.dumps(detect_device_capabilities(torch))
+
+    def test_resolver_keeps_official_cpu_build_on_cpu(self):
+        result = resolve_compute_device(
+            "cpu",
+            capabilities={"cuda_available": True},
+            official_cpu_build=True,
+        )
+
+        self.assertEqual(result["requested_device"], "cpu")
+        self.assertEqual(result["resolved_device"], "cpu")
+        self.assertEqual(result["fallback_reason"], "official_cpu_build")
+
+    def test_resolver_auto_currently_resolves_to_cpu(self):
+        result = resolve_compute_device(
+            "auto",
+            capabilities={"cuda_available": True},
+            official_cpu_build=False,
+        )
+
+        self.assertEqual(result["resolved_device"], "cpu")
+        self.assertEqual(result["fallback_reason"], "auto_defaults_to_cpu")
+
+    def test_resolver_explicit_cuda_falls_back_on_cpu_build(self):
+        result = resolve_compute_device(
+            "cuda",
+            capabilities={"cuda_available": True},
+            official_cpu_build=True,
+        )
+
+        self.assertEqual(result["resolved_device"], "cpu")
+        self.assertEqual(result["fallback_reason"], "official_cpu_build")
+
+    def test_resolver_explicit_cuda_falls_back_when_unavailable(self):
+        result = resolve_compute_device(
+            "cuda",
+            capabilities={"cuda_available": False},
+            official_cpu_build=False,
+        )
+
+        self.assertEqual(result["resolved_device"], "cpu")
+        self.assertEqual(result["fallback_reason"], "cuda_unavailable")
+
+    def test_resolver_allows_future_cuda_build_when_available(self):
+        result = resolve_compute_device(
+            "cuda",
+            capabilities={"cuda_available": True},
+            official_cpu_build=False,
+        )
+
+        self.assertEqual(result["resolved_device"], "cuda")
+        self.assertIsNone(result["fallback_reason"])
+
+    def test_resolver_result_is_json_serializable(self):
+        result = resolve_compute_device(
+            "cuda",
+            capabilities={"cuda_available": False},
+        )
+
+        json.dumps(result)
 
 
 if __name__ == "__main__":
