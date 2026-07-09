@@ -8,6 +8,7 @@ Licensed under CC BY-NC 4.0 — non-commercial use only.
 """
 
 import gc
+import logging
 import threading
 
 import cv2
@@ -16,6 +17,8 @@ import PIL.Image
 import torch
 
 from core.device_detection import detect_device_capabilities, is_official_cpu_build, resolve_compute_device
+
+logger = logging.getLogger(__name__)
 
 
 class MangaNinjaColorizer:
@@ -36,8 +39,13 @@ class MangaNinjaColorizer:
         self._pipeline = None
         self.device_name = str(self._device)
         self.cuda_available = bool(resolution["cuda_available"])
+        self.failure_reason = None
 
-        self._load_pipeline()
+        try:
+            self._load_pipeline()
+        except RuntimeError as exc:
+            self._handle_cuda_failure(exc, "Reference model load", clear_pipeline=True)
+            raise
 
     @staticmethod
     def _device_resolution(device: str) -> dict:
@@ -51,6 +59,38 @@ class MangaNinjaColorizer:
     @staticmethod
     def _resolve_device(device: str):
         return torch.device(MangaNinjaColorizer._device_resolution(device)["resolved_device"])
+
+    @staticmethod
+    def _cuda_failure_reason(exc: RuntimeError) -> str | None:
+        message = str(exc).lower()
+        if "out of memory" in message:
+            return "cuda_out_of_memory"
+        if "cuda" in message and any(
+            token in message
+            for token in ("runtime", "driver", "device-side", "illegal memory", "launch failed")
+        ):
+            return "cuda_runtime_failure"
+        return None
+
+    @staticmethod
+    def _clear_cuda_cache() -> None:
+        try:
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+        except RuntimeError:
+            logger.warning("Unable to clear CUDA cache after Reference mode CUDA failure", exc_info=True)
+
+    def _handle_cuda_failure(self, exc: RuntimeError, context: str, *, clear_pipeline: bool = False) -> None:
+        reason = self._cuda_failure_reason(exc)
+        if reason is None:
+            return
+        self.failure_reason = reason
+        logger.exception("%s failed with %s", context, reason)
+        if clear_pipeline and self._pipeline is not None:
+            del self._pipeline
+            self._pipeline = None
+            gc.collect()
+        self._clear_cuda_cache()
 
     def _load_pipeline(self):
         """Load the full MangaNinja pipeline."""
@@ -180,14 +220,18 @@ class MangaNinjaColorizer:
         ref_pil = PIL.Image.fromarray(reference_image[:, :, ::-1])
 
         with self._lock:
-            with torch.inference_mode():
-                result_rgb = self._pipeline(
-                    ref_image=ref_pil,
-                    target_image=target_pil,
-                    num_inference_steps=self._config.MANGANINJA_DENOISE_STEPS,
-                    width=size,
-                    height=size,
-                )
+            try:
+                with torch.inference_mode():
+                    result_rgb = self._pipeline(
+                        ref_image=ref_pil,
+                        target_image=target_pil,
+                        num_inference_steps=self._config.MANGANINJA_DENOISE_STEPS,
+                        width=size,
+                        height=size,
+                    )
+            except RuntimeError as exc:
+                self._handle_cuda_failure(exc, "Reference inference")
+                raise
 
         # Convert RGB -> BGR
         result_bgr = cv2.cvtColor(result_rgb, cv2.COLOR_RGB2BGR)
@@ -207,5 +251,4 @@ class MangaNinjaColorizer:
                 del self._pipeline
                 self._pipeline = None
             gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
+            self._clear_cuda_cache()
