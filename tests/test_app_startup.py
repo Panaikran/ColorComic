@@ -7,6 +7,7 @@ import unittest
 
 
 _MISSING = object()
+_IMPORT_SENSITIVE_MODULES = ("torch", "cv2", "diffusers", "transformers")
 
 
 class FakeConfig(dict):
@@ -55,7 +56,10 @@ def install_fake_flask():
 
 class AppStartupTests(unittest.TestCase):
     def setUp(self):
-        self.original_torch_module = sys.modules.get("torch", _MISSING)
+        self.original_import_modules = {
+            name: sys.modules.get(name, _MISSING)
+            for name in _IMPORT_SENSITIVE_MODULES
+        }
         self.original_local_app_data = os.environ.get("LOCALAPPDATA")
         self.local_app_data = os.path.join(os.getcwd(), "tests")
         self.app_data = os.path.join(self.local_app_data, "ColorComic")
@@ -69,17 +73,15 @@ class AppStartupTests(unittest.TestCase):
             "core.paths",
             "flask",
             "dotenv",
-            "cv2",
-            "diffusers",
-            "transformers",
             "core.model_manager",
             "core.model_downloader",
         ):
             sys.modules.pop(name, None)
-        if self.original_torch_module is _MISSING:
-            sys.modules.pop("torch", None)
-        else:
-            sys.modules["torch"] = self.original_torch_module
+        for name, module in self.original_import_modules.items():
+            if module is _MISSING:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
         if self.original_local_app_data is None:
             os.environ.pop("LOCALAPPDATA", None)
         else:
