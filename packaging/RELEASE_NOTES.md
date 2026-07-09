@@ -1,5 +1,48 @@
 # ColorComic Release Notes
 
+## v0.5.0 - Diagnostics, Performance Baseline, and CUDA Groundwork
+
+This release improves observability and runtime robustness for the Windows CPU
+desktop app while preserving the existing Flask backend, pywebview shell,
+PyInstaller one-folder build, Inno Setup installer, local runtime layout, and
+CPU-only official release path.
+
+### Added
+
+- Internal job timing summaries for coarse processing phases.
+- Page-based ETA during CPU processing after completed pages are available.
+- `/api/diagnostics` for safe local runtime status without model loading.
+- `/api/diagnostics/bundle` for local support ZIP export without uploads,
+  outputs, model weights, or cache files.
+- Runtime health preflight checks for writable runtime folders and disk space
+  before long processing begins.
+- Conservative orphaned upload/intermediate cleanup that preserves outputs,
+  logs, preferences, model weights, cache, and Recent Outputs history.
+- Device capability detection and CPU-safe compute resolution helpers.
+- Experimental CUDA development requirements for source-only developer testing.
+- CUDA build evaluation notes for a possible future separate preview installer.
+
+### Changed
+
+- Processing now shows clearer CPU guidance for long-running CPU jobs.
+- Single-job processing avoids a small amount of repeated per-page work without
+  changing model inference, PDF output, or image quality.
+- Packaging validation now covers timing, ETA, diagnostics, runtime robustness,
+  cleanup, device capability checks, and CUDA documentation boundaries.
+- Installer/package version is now `0.5.0`; expected installer output is
+  `packaging\inno\output\ColorComic-Setup-0.5.0-win64-cpu.exe`.
+
+### Unchanged
+
+- The official supported installer remains CPU-only.
+- No CUDA installer is shipped.
+- No GPU/CUDA Preferences controls are exposed.
+- No model behavior changes.
+- No auto-updater.
+- No cloud features or telemetry.
+- Model weights are still downloaded on first use and are not bundled.
+- Runtime data is still stored under `%LOCALAPPDATA%\ColorComic`.
+
 ## v0.4.0 - Workflow Polish and Accessibility
 
 This release improves the Windows CPU desktop workflow without changing model

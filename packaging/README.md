@@ -227,7 +227,7 @@ path, and size in MB.
 Expected installer output:
 
 ```text
-packaging\inno\output\ColorComic-Setup-0.4.0-win64-cpu.exe
+packaging\inno\output\ColorComic-Setup-0.5.0-win64-cpu.exe
 ```
 
 The installer copies `dist\ColorComic` into Program Files, creates a Start Menu
@@ -300,7 +300,7 @@ Continue to verify the v0.2.0 local workflow hardening:
 - Desktop-only **Open Folder** and **Show PDF** actions open runtime output
   locations.
 
-See `packaging\RELEASE_NOTES.md` for the v0.4.0 release summary.
+See `packaging\RELEASE_NOTES.md` for the v0.5.0 release summary.
 
 Uninstall preserves runtime data by default:
 

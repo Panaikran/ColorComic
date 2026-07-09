@@ -3,7 +3,7 @@ import re
 import unittest
 
 
-RELEASE_VERSION = "0.4.0"
+RELEASE_VERSION = "0.5.0"
 INSTALLER_NAME = f"ColorComic-Setup-{RELEASE_VERSION}-win64-cpu.exe"
 
 
@@ -41,8 +41,8 @@ class ReleaseVersionDocsTests(unittest.TestCase):
     def test_readme_mentions_current_release_summary(self):
         readme = self.read_file("README.md")
 
-        self.assertIn("## v0.4.0 Summary", readme)
-        self.assertIn("workflow", readme)
+        self.assertIn("## v0.5.0 Summary", readme)
+        self.assertIn("diagnostics", readme)
 
     def test_packaging_docs_cover_batch_validation(self):
         validation = self.read_file("packaging", "VALIDATION.md")
@@ -153,6 +153,30 @@ class ReleaseVersionDocsTests(unittest.TestCase):
 
         self.assertNotIn("CUDA installer is supported", packaging_readme)
         self.assertNotIn("GPU is selectable in Preferences", packaging_readme)
+
+    def test_release_notes_cover_completed_v050_work_only(self):
+        notes = self.read_file("packaging", "RELEASE_NOTES.md")
+        latest_section = notes.split("## v0.4.0", 1)[0]
+
+        for expected in (
+            "Performance Baseline",
+            "job timing",
+            "Page-based ETA",
+            "/api/diagnostics",
+            "/api/diagnostics/bundle",
+            "Runtime health preflight",
+            "orphaned upload/intermediate cleanup",
+            "CPU guidance",
+            "Experimental CUDA development",
+            "official supported installer remains CPU-only",
+            "No CUDA installer is shipped.",
+            "ColorComic-Setup-0.5.0-win64-cpu.exe",
+        ):
+            with self.subTest(expected=expected):
+                self.assertIn(expected, latest_section)
+
+        self.assertNotIn("CUDA installer exists", latest_section)
+        self.assertNotIn("auto-updater", latest_section.lower().split("### added", 1)[-1].split("### unchanged", 1)[0])
 
 
 if __name__ == "__main__":

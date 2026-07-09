@@ -30,13 +30,12 @@ Automatically colorize black-and-white comic and manga pages using deep learning
 - **Zero cloud dependency** — everything runs locally, no API keys needed
 - **Auto model download** — weights are downloaded automatically on first use
 
-## v0.4.0 Summary
+## v0.5.0 Summary
 
-ColorComic v0.4.0 polishes the Windows CPU desktop workflow while preserving
-the existing architecture. Processing feedback is clearer, Recent Outputs can
-remove history entries without deleting files, batch setup now previews and
-removes selected PDFs before creation, Preferences can reset to defaults, and
-dynamic UI areas have better accessibility and narrow-window behavior.
+ColorComic v0.5.0 improves the Windows CPU desktop release with performance
+instrumentation, page-based ETA, diagnostics, runtime robustness checks,
+conservative CPU processing polish, and documented CUDA experimentation for
+developers. The official supported installer remains CPU-only.
 
 ## How It Works
 
