@@ -25,6 +25,7 @@ python scripts\verify_dependency_imports.py
 The official Windows installer is CPU-only. `requirements-windows-cuda-experimental.txt`
 exists only for source-based developer CUDA experiments and is not used by
 `build_windows.ps1`, `build_installer.ps1`, PyInstaller, or Inno Setup.
+See `packaging\CUDA_BUILD_PLAN.md` for the future CUDA installer evaluation.
 
 Run the focused tests:
 

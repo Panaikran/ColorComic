@@ -98,6 +98,26 @@ class ReleaseVersionDocsTests(unittest.TestCase):
         self.assertIn("official Windows installer is CPU-only", packaging_readme)
         self.assertIn("source-based developer CUDA experiments", packaging_readme)
 
+    def test_cuda_build_plan_keeps_cpu_release_official(self):
+        plan = self.read_file("packaging", "CUDA_BUILD_PLAN.md")
+        packaging_readme = self.read_file("packaging", "README.md")
+
+        for expected in (
+            "Keep v0.5.0 CPU-only.",
+            "separate CUDA preview installer in v0.6.0 or later",
+            "Do not use a unified installer yet.",
+            "driver `531.14` or newer",
+            "Auto mode: recommend at least 4 GB VRAM",
+            "Reference mode: recommend at least 8 GB VRAM",
+            "CUDA runtime DLLs",
+            "PyInstaller",
+            "multiple gigabytes",
+        ):
+            with self.subTest(expected=expected):
+                self.assertIn(expected, plan)
+
+        self.assertIn("packaging\\CUDA_BUILD_PLAN.md", packaging_readme)
+
 
 if __name__ == "__main__":
     unittest.main()
