@@ -238,6 +238,20 @@ def remove_queued_job(batch: BatchRecord, job_id: str, now: str | None = None) -
     if batch.job_statuses[job_id] != STATUS_QUEUED:
         raise BatchQueueError("Only queued jobs can be removed")
 
+    return _remove_job(batch, job_id, now)
+
+
+def remove_pending_job(batch: BatchRecord, job_id: str, now: str | None = None) -> BatchRecord:
+    if job_id not in batch.job_statuses:
+        raise BatchQueueError(f"Job is not part of this batch: {job_id}")
+    if batch.job_statuses[job_id] not in {STATUS_QUEUED, STATUS_PAUSED}:
+        raise BatchQueueError("Only queued or paused jobs can be removed")
+
+    return _remove_job(batch, job_id, now)
+
+
+def _remove_job(batch: BatchRecord, job_id: str, now: str | None = None) -> BatchRecord:
+
     updated_statuses = dict(batch.job_statuses)
     del updated_statuses[job_id]
     new_status = derive_batch_status(updated_statuses, started_at=batch.started_at)

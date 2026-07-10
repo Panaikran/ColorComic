@@ -34,3 +34,5 @@ class JobState(BaseModel):
     device: str = "auto"
     mode: str = "auto"  # "auto" (mc-v2) or "reference" (MangaNinja)
     reference_image_path: Optional[str] = None
+    retry_of_job_id: Optional[str] = None
+    attempt_number: int = 1
