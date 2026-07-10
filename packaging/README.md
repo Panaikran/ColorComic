@@ -27,6 +27,12 @@ exists only for source-based developer CUDA experiments and is not used by
 `build_windows.ps1`, `build_installer.ps1`, PyInstaller, or Inno Setup.
 See `packaging\CUDA_BUILD_PLAN.md` for the future CUDA installer evaluation.
 
+CUDA preview artifacts are optional. The CPU installer remains required and
+official. Do not ship a CUDA preview installer unless source validation,
+packaged NVIDIA-machine validation, acceptable non-CUDA machine behavior,
+model-weight exclusion, artifact-size recording, and the CUDA Preferences
+hidden/unsupported boundary all pass.
+
 Run the focused tests:
 
 ```powershell

@@ -80,6 +80,11 @@ The CPU installer remains required and official. The CUDA preview artifact is
 optional and must not ship unless every CUDA preview check below passes on
 appropriate hardware.
 
+The CUDA preview must pass source validation before packaging. After packaging,
+it must pass packaged NVIDIA-machine validation before release. Non-CUDA
+machine behavior must be acceptable and documented. CUDA Preferences remain
+hidden/unsupported in v0.6.0.
+
 1. Create and activate a separate CUDA validation environment, for example
    `.venv-cuda`.
 2. Install `requirements-windows-cuda-experimental.txt`.
@@ -99,7 +104,7 @@ appropriate hardware.
 
    Expected: `dist\ColorComicCudaPreview\ColorComicCudaPreview.exe`.
 5. Build the CUDA preview Inno installer only after the PyInstaller artifact
-   exists and source-mode CUDA validation passes:
+   exists and source validation passes:
 
    ```powershell
    ISCC.exe packaging\inno\ColorComicCudaPreview.iss
@@ -107,7 +112,8 @@ appropriate hardware.
 
    Expected:
    `packaging\inno\output\ColorComic-Setup-0.6.0-win64-cuda-preview.exe`.
-6. Launch on an NVIDIA CUDA machine with a compatible driver.
+6. Launch the packaged CUDA preview on an NVIDIA CUDA machine with a compatible
+   driver.
    Expected: the app opens, `/api/health` works, diagnostics report CUDA
    capability, and a tiny Auto-mode PDF can complete.
 7. Launch on a non-CUDA machine.
@@ -119,6 +125,9 @@ appropriate hardware.
 9. Record artifact sizes for:
    - `dist\ColorComicCudaPreview`
    - `ColorComic-Setup-0.6.0-win64-cuda-preview.exe`
+10. Confirm CUDA Preferences remain hidden/unsupported:
+    - Preferences still show CPU-only/read-only device behavior.
+    - No GPU/CUDA preference can be saved in v0.6.0.
 
 Do not publish the CUDA preview installer if any CUDA preview gate fails. The
 CPU installer remains the supported release artifact.
