@@ -696,12 +696,35 @@ function startBatchPolling(batchId) {
     }, 2000);
 }
 
+function getBatchSummary(data) {
+    const counts = data.counts || {};
+    if (counts.paused > 0 && counts.queued === 0 && counts.running === 0) {
+        return 'Queue paused. Worker is idle because all remaining jobs are paused.';
+    }
+    if (counts.recovery_required > 0) {
+        return 'Recovery required after restart. Retry or remove affected jobs.';
+    }
+    if (counts.failed > 0) {
+        return 'Retryable failures remain. Retry failed jobs to continue.';
+    }
+    if (data.status === 'completed') {
+        return 'Queue completed successfully.';
+    }
+    if (counts.running > 0) {
+        return 'Worker is processing queued work.';
+    }
+    if (counts.queued > 0) {
+        return `Queue ready: ${counts.queued} queued.`;
+    }
+    return `Batch status: ${formatStatus(data.status)}`;
+}
+
 function renderBatchStatus(data) {
     if (!data) return;
 
     currentBatchId = data.batch_id || currentBatchId;
     batchIdText.textContent = currentBatchId ? `Batch ID: ${currentBatchId}` : 'No batch was created.';
-    batchStatusText.textContent = `Batch status: ${formatStatus(data.status)}`;
+    batchStatusText.textContent = getBatchSummary(data);
     renderBatchCounts(data.counts);
     renderBatchJobs(Array.isArray(data.jobs) ? data.jobs : []);
     if (startBatchBtn) {

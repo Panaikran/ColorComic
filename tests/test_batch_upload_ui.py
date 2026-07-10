@@ -174,6 +174,27 @@ class BatchUploadUiTests(unittest.TestCase):
         self.assertIn("if (retryAttempt) details.push(retryAttempt)", script)
         self.assertIn("batch-job-recovery_required", script)
 
+    def test_upload_script_summarizes_paused_and_idle_queue_state(self):
+        root = os.getcwd()
+        with open(os.path.join(root, "static", "js", "upload.js"), encoding="utf-8") as handle:
+            script = handle.read()
+
+        self.assertIn("function getBatchSummary(data)", script)
+        self.assertIn("counts.paused > 0 && counts.queued === 0 && counts.running === 0", script)
+        self.assertIn("Queue paused. Worker is idle because all remaining jobs are paused.", script)
+
+    def test_upload_script_summarizes_recovery_retry_and_completion_states(self):
+        root = os.getcwd()
+        with open(os.path.join(root, "static", "js", "upload.js"), encoding="utf-8") as handle:
+            script = handle.read()
+
+        self.assertIn("counts.recovery_required > 0", script)
+        self.assertIn("Recovery required after restart.", script)
+        self.assertIn("counts.failed > 0", script)
+        self.assertIn("Retryable failures remain.", script)
+        self.assertIn("Queue completed successfully.", script)
+        self.assertIn("batchStatusText.textContent = getBatchSummary(data)", script)
+
     def test_upload_script_preserves_single_pdf_colorization_flow(self):
         root = os.getcwd()
         with open(os.path.join(root, "static", "js", "upload.js"), encoding="utf-8") as handle:
