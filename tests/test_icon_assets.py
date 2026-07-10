@@ -21,7 +21,7 @@ class IconAssetTests(unittest.TestCase):
 
         with open(os.path.join(root, "packaging", "inno", "ColorComic.iss"), encoding="utf-8") as handle:
             installer = handle.read()
-        self.assertIn('#define MyAppVersion "0.6.0"', installer)
+        self.assertIn('#define MyAppVersion "0.7.0"', installer)
         self.assertIn("SetupIconFile={#MyAppIcon}", installer)
 
 

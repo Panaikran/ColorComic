@@ -65,6 +65,17 @@ python -m unittest `
   tests.test_recent_outputs_ui
 ```
 
+Run the v0.7.0 queue-management tests when validating the release candidate:
+
+```powershell
+python -m unittest `
+  tests.test_batch_queue `
+  tests.test_queue_manifest `
+  tests.test_queue_recovery `
+  tests.test_queue_api `
+  tests.test_batch_upload_ui
+```
+
 Run the v0.4.0 workflow-polish focused tests when validating the current UI
 workflow:
 
@@ -233,7 +244,7 @@ path, and size in MB.
 Expected installer output:
 
 ```text
-packaging\inno\output\ColorComic-Setup-0.6.0-win64-cpu.exe
+packaging\inno\output\ColorComic-Setup-0.7.0-win64-cpu.exe
 ```
 
 The installer copies `dist\ColorComic` into Program Files, creates a Start Menu
@@ -306,7 +317,7 @@ Continue to verify the v0.2.0 local workflow hardening:
 - Desktop-only **Open Folder** and **Show PDF** actions open runtime output
   locations.
 
-See `packaging\RELEASE_NOTES.md` for the v0.6.0 release summary.
+See `packaging\RELEASE_NOTES.md` for the v0.7.0 release summary.
 
 Uninstall preserves runtime data by default:
 

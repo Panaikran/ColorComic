@@ -64,7 +64,7 @@ class BuildInstallerScriptTests(unittest.TestCase):
     def test_installer_output_validation_checks_file_and_size(self):
         script = self.read_script()
 
-        self.assertIn('$InstallerFileName = "ColorComic-Setup-0.6.0-win64-cpu.exe"', script)
+        self.assertIn('$InstallerFileName = "ColorComic-Setup-0.7.0-win64-cpu.exe"', script)
         self.assertIn('$InstallerOutputPath = Join-Path (Join-Path $InnoDir "output") $InstallerFileName', script)
         self.assertIn("function Assert-InstallerOutput", script)
         self.assertIn("Test-Path -LiteralPath $InstallerOutputPath -PathType Leaf", script)
@@ -83,7 +83,7 @@ class BuildInstallerScriptTests(unittest.TestCase):
     def test_installer_version_matches_current_release(self):
         script = self.read_script()
 
-        self.assertIn("ColorComic-Setup-0.6.0-win64-cpu.exe", script)
+        self.assertIn("ColorComic-Setup-0.7.0-win64-cpu.exe", script)
 
 
 if __name__ == "__main__":

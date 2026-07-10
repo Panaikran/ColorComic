@@ -8,7 +8,7 @@ and the current unsigned installer output.
 
 - Expected output path: `dist\ColorComic\ColorComic.exe`
 - Expected installer path:
-  `packaging\inno\output\ColorComic-Setup-0.6.0-win64-cpu.exe`
+  `packaging\inno\output\ColorComic-Setup-0.7.0-win64-cpu.exe`
 - Expected build type: PyInstaller one-folder, not one-file
 - Observed local output size: about 2.17 GB for the full `dist\ColorComic`
   folder
@@ -71,7 +71,7 @@ Expected behavior:
 Expected installer output:
 
 ```text
-packaging\inno\output\ColorComic-Setup-0.6.0-win64-cpu.exe
+packaging\inno\output\ColorComic-Setup-0.7.0-win64-cpu.exe
 ```
 
 ## CUDA Preview Validation Gate
@@ -410,15 +410,27 @@ behavior, and permissions issues that a developer machine can hide.
       - Confirm cleanup is conservative and preserves user outputs and history.
     - Device capability and resolution:
       - Confirm CPU-only compute resolution remains the supported release path.
-      - Confirm CUDA documentation is clearly experimental/source-only.
+    - Confirm CUDA documentation is clearly experimental/source-only.
 
-22. Failed network download handling:
+22. v0.7.0 project and queue management:
+    - Pause and resume queued jobs; paused jobs must not start.
+    - Reorder queued jobs and confirm the next job follows the new order.
+    - Retry failed or recovery-required jobs; the original attempt remains in
+      history and the new attempt is linked.
+    - Remove queued or paused jobs without deleting their runtime files.
+    - Restart with queued, paused, failed, and interrupted-running jobs;
+      interrupted work must require recovery and no recovered batch may start
+      automatically.
+    - Confirm queue summaries distinguish queued, paused, running, failed,
+      recovery-required, and completed work.
+
+23. Failed network download handling:
     - Disconnect the network or block access to Google Drive/HuggingFace.
     - Start a colorization job that needs a missing model.
     - Expected: job enters an error state and the UI shows a useful failure
       instead of hanging indefinitely.
 
-23. App close releases process and port:
+24. App close releases process and port:
     - Close the ColorComic window.
     - Confirm `ColorComic.exe` exits.
     - Confirm the localhost listening port is released:
@@ -429,7 +441,7 @@ behavior, and permissions issues that a developer machine can hide.
         Where-Object { $_.OwningProcess -eq <old-process-id> }
       ```
 
-24. SmartScreen/Defender notes:
+25. SmartScreen/Defender notes:
     - Unsigned builds may show Microsoft Defender SmartScreen warnings.
     - Defender may scan or delay first launch because the folder is large and
       contains ML/runtime DLLs.

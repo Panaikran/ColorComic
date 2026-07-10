@@ -1,5 +1,28 @@
 # ColorComic Release Notes
 
+## v0.7.0 - Project and Queue Management
+
+This release makes long-running colorization batches easier to manage without
+changing the existing colorization pipeline.
+
+### Added
+
+- Queue controls to pause, resume, reorder, retry, and remove eligible jobs.
+- Retry attempts keep the failed or recovery-required job intact and link the
+  fresh queued attempt to it.
+- Queue manifest persistence with safe restart recovery: interrupted running
+  jobs are marked recovery-required and recovered batches never auto-start.
+- Queue counts and concise status summaries for paused, idle, retryable,
+  recovery-required, and completed work.
+
+### Unchanged
+
+- The CPU installer remains the official supported release artifact:
+  `ColorComic-Setup-0.7.0-win64-cpu.exe`.
+- CUDA remains preview-only and is not an official installer.
+- No cloud services, telemetry, accounts, auto-update, frontend rewrite, or
+  model-family changes were added.
+
 ## v0.6.0 - CUDA Preview Readiness
 
 This release prepares a CUDA preview investigation path while keeping the
