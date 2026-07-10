@@ -1297,14 +1297,17 @@ def create_app():
 
     @app.route("/api/colorize/<job_id>", methods=["POST"])
     def start_colorize(job_id):
-        job = jobs.get(job_id)
-        if not job:
-            return jsonify({"error": "Job not found"}), 404
+        with _batch_lock:
+            job = jobs.get(job_id)
+            if not job:
+                return jsonify({"error": "Job not found"}), 404
+            if job.status == "colorizing" and job_id in job_queues:
+                return jsonify({"error": "Job is already running"}), 409
 
-        job.status = "colorizing"
-        job.progress = 0.0
-        q = queue.Queue()
-        job_queues[job_id] = q
+            job.status = "colorizing"
+            job.progress = 0.0
+            q = queue.Queue()
+            job_queues[job_id] = q
 
         preflight = validate_colorize_preflight(
             job.pdf_path,
@@ -1316,8 +1319,10 @@ def create_app():
         preflight = _with_runtime_health(preflight)
         if not preflight.ok:
             current_step = preflight.errors[0].step if preflight.errors else "preflight"
-            job.status = "error"
-            job.current_step = current_step
+            with _batch_lock:
+                if job_queues.get(job_id) is q:
+                    job.status = "error"
+                    job.current_step = current_step
             q.put({
                 "error": _preflight_error_message(preflight.errors),
                 "step": current_step,
@@ -1331,7 +1336,9 @@ def create_app():
             try:
                 _run_colorization_job(job_id, job, q, out_dir)
             finally:
-                job_queues.pop(job_id, None)
+                with _batch_lock:
+                    if job_queues.get(job_id) is q:
+                        job_queues.pop(job_id, None)
 
         threading.Thread(target=_run, daemon=True).start()
         return jsonify({"ok": True})

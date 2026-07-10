@@ -73,6 +73,131 @@ class ColorizePreflightRouteTests(unittest.TestCase):
         for name in self.modules_to_clear:
             sys.modules.pop(name, None)
 
+    def make_job(self, job_id, pdf_path):
+        return types.SimpleNamespace(
+            job_id=job_id,
+            pdf_path=pdf_path,
+            page_count=1,
+            page_images=[],
+            colorized_images=[],
+            status="uploaded",
+            progress=0.0,
+            current_step="",
+            style="auto",
+            device="cpu",
+            mode="auto",
+            reference_image_path=None,
+            output_pdf=None,
+        )
+
+    def successful_preflight(self, output_folder, job_id):
+        return types.SimpleNamespace(
+            ok=True,
+            output_dir=os.path.join(output_folder, job_id),
+            errors=(),
+        )
+
+    def test_duplicate_active_request_is_rejected_without_creating_another_worker(self):
+        app = self.app_module
+        original_thread = app.threading.Thread
+        original_preflight = app.validate_colorize_preflight
+        original_worker = app._run_colorization_job
+        FakeThread.instances = []
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            job_id = "duplicate-start"
+            app.jobs[job_id] = self.make_job(job_id, os.path.join(temp_dir, "input.pdf"))
+            app.threading.Thread = FakeThread
+            app.validate_colorize_preflight = (
+                lambda pdf_path, job_id, output_folder, **kwargs: self.successful_preflight(output_folder, job_id)
+            )
+            app._run_colorization_job = lambda *args: True
+
+            try:
+                first_response = self.flask_app.routes["/api/colorize/<job_id>"](job_id)
+                active_queue = app.job_queues[job_id]
+                duplicate_response = self.flask_app.routes["/api/colorize/<job_id>"](job_id)
+            finally:
+                app.threading.Thread = original_thread
+                app.validate_colorize_preflight = original_preflight
+                app._run_colorization_job = original_worker
+
+        self.assertEqual(first_response, {"ok": True})
+        self.assertEqual(duplicate_response, ({"error": "Job is already running"}, 409))
+        self.assertEqual(len(FakeThread.instances), 1)
+        self.assertIs(app.job_queues[job_id], active_queue)
+
+    def test_preflight_failure_allows_a_new_execution_attempt(self):
+        app = self.app_module
+        original_thread = app.threading.Thread
+        original_preflight = app.validate_colorize_preflight
+        original_worker = app._run_colorization_job
+        FakeThread.instances = []
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            job_id = "preflight-retry"
+            app.jobs[job_id] = self.make_job(job_id, os.path.join(temp_dir, "input.pdf"))
+            results = iter((
+                types.SimpleNamespace(
+                    ok=False,
+                    output_dir=os.path.join(temp_dir, "output", job_id),
+                    errors=(types.SimpleNamespace(message="invalid PDF", step="PDF preflight"),),
+                ),
+                self.successful_preflight(os.path.join(temp_dir, "output"), job_id),
+            ))
+            app.threading.Thread = FakeThread
+            app.validate_colorize_preflight = lambda *args, **kwargs: next(results)
+            app._run_colorization_job = lambda *args: True
+
+            try:
+                failed_response = self.flask_app.routes["/api/colorize/<job_id>"](job_id)
+                failed_queue = app.job_queues[job_id]
+                retry_response = self.flask_app.routes["/api/colorize/<job_id>"](job_id)
+            finally:
+                app.threading.Thread = original_thread
+                app.validate_colorize_preflight = original_preflight
+                app._run_colorization_job = original_worker
+
+        self.assertEqual(failed_response, {"ok": True})
+        self.assertEqual(retry_response, {"ok": True})
+        self.assertEqual(len(FakeThread.instances), 1)
+        self.assertIsNot(app.job_queues[job_id], failed_queue)
+
+    def test_terminal_completion_allows_a_new_execution_attempt(self):
+        app = self.app_module
+        original_thread = app.threading.Thread
+        original_preflight = app.validate_colorize_preflight
+        original_worker = app._run_colorization_job
+        FakeThread.instances = []
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            job_id = "terminal-retry"
+            job = self.make_job(job_id, os.path.join(temp_dir, "input.pdf"))
+            app.jobs[job_id] = job
+            app.threading.Thread = FakeThread
+            app.validate_colorize_preflight = (
+                lambda pdf_path, job_id, output_folder, **kwargs: self.successful_preflight(output_folder, job_id)
+            )
+
+            def complete_worker(*args):
+                job.status = "completed"
+                return True
+
+            app._run_colorization_job = complete_worker
+
+            try:
+                first_response = self.flask_app.routes["/api/colorize/<job_id>"](job_id)
+                FakeThread.instances[0].target()
+                retry_response = self.flask_app.routes["/api/colorize/<job_id>"](job_id)
+            finally:
+                app.threading.Thread = original_thread
+                app.validate_colorize_preflight = original_preflight
+                app._run_colorization_job = original_worker
+
+        self.assertEqual(first_response, {"ok": True})
+        self.assertEqual(retry_response, {"ok": True})
+        self.assertEqual(len(FakeThread.instances), 2)
+
     def test_preflight_failure_streams_existing_error_shape_before_model_load(self):
         app = self.app_module
         model_load_called = {"value": False}
