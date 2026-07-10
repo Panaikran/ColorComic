@@ -4,6 +4,7 @@ import unittest
 
 
 RELEASE_VERSION = "0.5.0"
+RELEASE_NOTES_VERSION = "0.6.0"
 INSTALLER_NAME = f"ColorComic-Setup-{RELEASE_VERSION}-win64-cpu.exe"
 
 
@@ -39,7 +40,7 @@ class ReleaseVersionDocsTests(unittest.TestCase):
         headings = re.findall(r"^## (v[0-9]+\.[0-9]+\.[0-9]+)", notes, flags=re.MULTILINE)
 
         self.assertGreaterEqual(len(headings), 1)
-        self.assertEqual(headings[0], f"v{RELEASE_VERSION}")
+        self.assertEqual(headings[0], f"v{RELEASE_NOTES_VERSION}")
 
     def test_readme_mentions_current_release_summary(self):
         readme = self.read_file("README.md")
@@ -328,7 +329,7 @@ class ReleaseVersionDocsTests(unittest.TestCase):
 
     def test_release_notes_cover_completed_v050_work_only(self):
         notes = self.read_file("packaging", "RELEASE_NOTES.md")
-        latest_section = notes.split("## v0.4.0", 1)[0]
+        latest_section = notes.split("## v0.5.0", 1)[1].split("## v0.4.0", 1)[0]
 
         for expected in (
             "Performance Baseline",
@@ -349,6 +350,29 @@ class ReleaseVersionDocsTests(unittest.TestCase):
 
         self.assertNotIn("CUDA installer exists", latest_section)
         self.assertNotIn("auto-updater", latest_section.lower().split("### added", 1)[-1].split("### unchanged", 1)[0])
+
+    def test_release_notes_cover_completed_v060_work_only(self):
+        notes = self.read_file("packaging", "RELEASE_NOTES.md")
+        latest_section = notes.split("## v0.5.0", 1)[0]
+
+        for expected in (
+            "v0.6.0 - CUDA Preview Readiness",
+            "Centralized compute device resolution",
+            "CUDA runtime robustness improvements",
+            "Diagnostics fields for CUDA preview status",
+            "Source CUDA validation tooling",
+            "CUDA preview packaging infrastructure",
+            "build_windows_cuda_preview.ps1",
+            "ColorComicCudaPreview.spec",
+            "ColorComicCudaPreview.iss",
+            "CUDA preview validation and release-gate documentation",
+            "CPU installer remains the official supported release",
+            "CUDA remains preview/experimental and is not an official installer",
+        ):
+            with self.subTest(expected=expected):
+                self.assertIn(expected, latest_section)
+
+        self.assertNotIn("future roadmap", latest_section.lower())
 
 
 if __name__ == "__main__":

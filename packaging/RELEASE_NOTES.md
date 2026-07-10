@@ -1,5 +1,47 @@
 # ColorComic Release Notes
 
+## v0.6.0 - CUDA Preview Readiness
+
+This release prepares a CUDA preview investigation path while keeping the
+official supported Windows installer CPU-only.
+
+### Added
+
+- Centralized compute device resolution across model management, Auto mode,
+  Reference mode, and optional upscaling paths.
+- CUDA runtime robustness improvements for clearer CUDA failure handling,
+  cleanup, and CPU-safe fallback behavior where supported.
+- Diagnostics fields for CUDA preview status, resolved device, capabilities,
+  loaded model device, and fallback reason when available.
+- Source CUDA validation tooling through dependency verification output and the
+  experimental CUDA requirements file.
+- CUDA preview packaging infrastructure:
+  - `packaging\build_windows_cuda_preview.ps1`
+  - `packaging\ColorComicCudaPreview.spec`
+  - `packaging\inno\ColorComicCudaPreview.iss`
+  - CUDA preview validation and release-gate documentation.
+
+### Changed
+
+- Packaging documentation now separates the official CPU release from optional
+  CUDA preview artifacts.
+- Validation docs now require source CUDA validation, packaged NVIDIA-machine
+  validation, acceptable non-CUDA machine behavior, model-weight exclusion, and
+  artifact-size recording before any CUDA preview artifact can ship.
+- Preferences/UI boundaries are documented: CUDA remains hidden/unsupported in
+  Preferences for v0.6.0.
+
+### Unchanged
+
+- The CPU installer remains the official supported release.
+- CUDA remains preview/experimental and is not an official installer.
+- No CUDA Preferences controls are exposed.
+- No model behavior changes.
+- No auto-updater.
+- No cloud features or telemetry.
+- Model weights are still downloaded on first use and are not bundled.
+- Runtime data is still stored under `%LOCALAPPDATA%\ColorComic`.
+
 ## v0.5.0 - Diagnostics, Performance Baseline, and CUDA Groundwork
 
 This release improves observability and runtime robustness for the Windows CPU
