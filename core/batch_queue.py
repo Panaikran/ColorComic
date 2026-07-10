@@ -304,8 +304,10 @@ class SingleWorkerBatchRunner:
         failed_job_ids: list[str] = []
         current_batch = batch
 
-        while not current_batch.is_terminal:
+        while True:
             current_batch = self._refresh(current_batch)
+            if current_batch.is_terminal:
+                break
             job_id = next_queued_job_id(current_batch)
             if job_id is None:
                 break

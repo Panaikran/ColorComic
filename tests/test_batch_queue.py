@@ -1,6 +1,7 @@
 import unittest
 
 from core.batch_queue import (
+    BatchRecord,
     BatchQueueError,
     STATUS_CANCELLED,
     STATUS_COMPLETED,
@@ -10,6 +11,7 @@ from core.batch_queue import (
     STATUS_RUNNING,
     SingleWorkerBatchRunner,
     create_batch,
+    remove_pending_job,
     remove_queued_job,
     reorder_queued_job,
     transition_job,
@@ -270,6 +272,121 @@ class BatchQueueTests(unittest.TestCase):
         self.assertEqual(result.batch.job_statuses["job-2"], STATUS_CANCELLED)
         self.assertEqual(result.batch.counts.completed, 1)
         self.assertEqual(result.batch.counts.cancelled, 1)
+        self.assertEqual(result.batch.status, STATUS_COMPLETED)
+
+    def test_runner_skips_paused_jobs_and_stays_idle_without_completing_batch(self):
+        current_batch = create_batch("batch-1", ["job-1", "job-2"])
+        seen = []
+
+        def store_update(batch):
+            nonlocal current_batch
+            current_batch = batch
+
+        runner = SingleWorkerBatchRunner(on_update=store_update, get_latest=lambda _: current_batch)
+
+        def process(job_id):
+            nonlocal current_batch
+            seen.append(job_id)
+            current_batch = transition_job(current_batch, "job-2", STATUS_PAUSED)
+            return True
+
+        result = runner.start(current_batch, process)
+
+        self.assertEqual(seen, ["job-1"])
+        self.assertEqual(result.batch.job_statuses["job-2"], STATUS_PAUSED)
+        self.assertEqual(result.batch.status, STATUS_PAUSED)
+        self.assertFalse(result.batch.is_terminal)
+
+    def test_runner_honors_reordered_queue_after_current_job(self):
+        current_batch = create_batch("batch-1", ["job-1", "job-2", "job-3"])
+        seen = []
+
+        def store_update(batch):
+            nonlocal current_batch
+            current_batch = batch
+
+        runner = SingleWorkerBatchRunner(on_update=store_update, get_latest=lambda _: current_batch)
+
+        def process(job_id):
+            nonlocal current_batch
+            seen.append(job_id)
+            if job_id == "job-1":
+                current_batch = reorder_queued_job(current_batch, "job-3", "job-2")
+            return True
+
+        runner.start(current_batch, process)
+
+        self.assertEqual(seen, ["job-1", "job-3", "job-2"])
+
+    def test_runner_never_executes_removed_job(self):
+        current_batch = create_batch("batch-1", ["job-1", "job-2", "job-3"])
+        seen = []
+
+        def store_update(batch):
+            nonlocal current_batch
+            current_batch = batch
+
+        runner = SingleWorkerBatchRunner(on_update=store_update, get_latest=lambda _: current_batch)
+
+        def process(job_id):
+            nonlocal current_batch
+            seen.append(job_id)
+            if job_id == "job-1":
+                current_batch = remove_pending_job(current_batch, "job-2")
+            return True
+
+        runner.start(current_batch, process)
+
+        self.assertEqual(seen, ["job-1", "job-3"])
+
+    def test_runner_executes_queued_retry_after_failed_parent_update(self):
+        current_batch = create_batch("batch-1", ["job-1"])
+        seen = []
+
+        def store_update(batch):
+            nonlocal current_batch
+            if batch.job_statuses["job-1"] == STATUS_FAILED and "job-2" not in batch.job_statuses:
+                statuses = dict(batch.job_statuses)
+                statuses["job-2"] = STATUS_QUEUED
+                current_batch = BatchRecord(
+                    batch_id=batch.batch_id,
+                    job_ids=("job-1", "job-2"),
+                    job_statuses=statuses,
+                    status=STATUS_QUEUED,
+                    created_at=batch.created_at,
+                )
+            else:
+                current_batch = batch
+
+        runner = SingleWorkerBatchRunner(on_update=store_update, get_latest=lambda _: current_batch)
+
+        def process(job_id):
+            seen.append(job_id)
+            return job_id == "job-2"
+
+        result = runner.start(current_batch, process)
+
+        self.assertEqual(seen, ["job-1", "job-2"])
+        self.assertEqual(result.failed_job_ids, ("job-1",))
+        self.assertEqual(result.batch.job_statuses["job-2"], STATUS_COMPLETED)
+
+    def test_runner_processes_resumed_job_after_paused_idle_state(self):
+        current_batch = create_batch("batch-1", ["job-1"])
+        current_batch = transition_job(current_batch, "job-1", STATUS_PAUSED)
+
+        def store_update(batch):
+            nonlocal current_batch
+            current_batch = batch
+
+        runner = SingleWorkerBatchRunner(on_update=store_update, get_latest=lambda _: current_batch)
+
+        idle = runner.run_until_idle(current_batch, lambda job_id: self.fail("paused job ran"))
+        current_batch = transition_job(current_batch, "job-1", STATUS_QUEUED)
+        seen = []
+
+        result = runner.run_until_idle(idle.batch, lambda job_id: seen.append(job_id) or True)
+
+        self.assertEqual(seen, ["job-1"])
         self.assertEqual(result.batch.status, STATUS_COMPLETED)
 
 
