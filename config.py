@@ -1,5 +1,7 @@
 import os
 
+from dotenv import load_dotenv
+
 from core.paths import ensure_directories, get_app_base_dir, get_runtime_dir
 
 
@@ -15,6 +17,9 @@ CONFIG_DIR = os.path.join(RUNTIME_DIR, "config")
 CONFIG_FILE = os.path.join(CONFIG_DIR, ".env")
 APP_ICON_STATIC_PATH = "img/colorcomic.ico"
 APP_ICON_PATH = os.path.join(BASE_DIR, "static", "img", "colorcomic.ico")
+
+load_dotenv(CONFIG_FILE, override=False)
+load_dotenv(os.path.join(BASE_DIR, ".env"), override=False)
 
 os.environ["HF_HOME"] = HF_HOME
 os.environ["HF_HUB_CACHE"] = HF_HUB_CACHE
