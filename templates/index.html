@@ -2,24 +2,40 @@
 {% block title %}ColorComic — Upload{% endblock %}
 
 {% block content %}
-<div class="container" style="max-width: 640px;">
-    <div class="card mt-3">
-        <h2 style="margin-bottom: 1.5rem;">Upload B&W Comic PDF</h2>
+<div class="container" style="max-width: 720px;">
 
-        <div class="upload-zone" id="dropZone">
-            <div class="icon">&#128196;</div>
+    <div class="card mt-3 onboarding-card">
+        <h3 class="onboarding-title">How it works</h3>
+        <ol class="onboarding-steps">
+            <li><strong>Upload</strong> a B&W comic PDF.</li>
+            <li>Pick a <strong>style</strong> (Shonen, Webtoon, Marvel, …) and a <strong>quality</strong> (Draft / Standard / Ultra).</li>
+            <li>Optional: add <strong>reference pages</strong> to lock in a palette.</li>
+            <li>Watch live previews and re-roll any page that misses.</li>
+        </ol>
+    </div>
+
+    <div class="card mt-3">
+        <h2 class="card-title">Upload B&W Comic PDF</h2>
+
+        <div class="upload-zone" id="dropZone" role="button" tabindex="0"
+             aria-label="Upload a B&W comic PDF. Press Enter to browse files, or drop a PDF here.">
+            <div class="icon" aria-hidden="true">&#128196;</div>
             <p><strong>Drop your PDF here</strong></p>
             <p>or click to browse</p>
-            <input type="file" id="fileInput" accept=".pdf">
+            <p id="dropError" class="drop-error" hidden></p>
+            <p id="dropNote" class="drop-note" hidden></p>
+            <input type="file" id="fileInput" class="sr-only" accept=".pdf"
+                   aria-label="Choose a PDF file">
         </div>
 
-        <div id="fileInfo" class="file-info" style="display:none;">
+        <div id="fileInfo" class="file-info" hidden>
             <strong id="fileName"></strong>
             <span id="fileSize" class="text-dim" style="margin-left:0.5rem;"></span>
         </div>
 
-        <div class="form-group mt-2">
-            <label>Colorization Mode</label>
+        <!-- Mode -->
+        <fieldset class="form-group mt-2">
+            <legend>Colorization Mode</legend>
             <div class="radio-group">
                 <label>
                     <input type="radio" name="mode" value="auto" checked>
@@ -29,28 +45,56 @@
                     <input type="radio" name="mode" value="reference">
                     Reference (MangaNinja)
                 </label>
+                <label>
+                    <input type="radio" name="mode" value="llm">
+                    LLM (OpenRouter)
+                </label>
             </div>
+            <p id="llmModeNotice" class="hint" hidden>
+                Uses OpenRouter image generation. Set OPENROUTER_API_KEY before starting the app.
+            </p>
+        </fieldset>
+
+        <!-- AI color director (guided coloring, auto mode) -->
+        <div class="form-group mt-2" id="directorGroup">
+            <label>
+                <input type="checkbox" id="llmDirector"
+                       {% if llm_director_default and llm_key_present %}checked{% endif %}
+                       {% if not llm_key_present %}disabled{% endif %}>
+                AI color director — a text-only LLM picks the book's palette
+            </label>
+            <p class="hint" style="margin-top:0.25rem;">
+                {% if llm_key_present %}
+                One small text request per book (no images are sent); pages are
+                still colored locally. Auto mode only.
+                {% else %}
+                Requires OPENROUTER_API_KEY — a curated palette is used instead.
+                {% endif %}
+            </p>
         </div>
 
-        <div id="referenceSection" style="display:none;">
+        <!-- Reference uploader -->
+        <div id="referenceSection" hidden>
             <div class="form-group">
-                <label>Reference Image</label>
-                <p class="text-dim" style="font-size:0.8rem; margin-bottom:0.5rem;">
-                    Upload one colored page to use as a color reference for all pages.
+                <label id="refLabel">Reference Images (1 or more)</label>
+                <p class="hint" style="margin-top:0; margin-bottom:0.5rem;">
+                    Upload one or more colored pages.  When multiple are given the system
+                    picks the closest match per page.
                 </p>
-                <div class="ref-upload-zone" id="refDropZone">
+                <div class="ref-upload-zone" id="refDropZone" role="button" tabindex="0"
+                     aria-label="Upload reference images. Press Enter to browse files, or drop PNG, JPG, or WEBP images here.">
                     <div id="refPlaceholder">
-                        <div class="icon" style="font-size:2rem;">&#127912;</div>
-                        <p><strong>Drop reference image here</strong></p>
-                        <p>PNG, JPG, or WEBP</p>
+                        <div class="icon" style="font-size:2rem;" aria-hidden="true">&#127912;</div>
+                        <p><strong>Drop reference images here</strong></p>
+                        <p>PNG, JPG, or WEBP — multiple supported</p>
+                        <p id="refDropError" class="drop-error" hidden></p>
+                        <p id="refDropNote" class="drop-note" hidden></p>
                     </div>
-                    <div id="refPreview" style="display:none;">
-                        <img id="refPreviewImg" alt="Reference preview">
-                        <button type="button" class="btn btn-sm btn-secondary" id="refRemoveBtn"
-                                style="position:absolute; top:8px; right:8px;">Remove</button>
-                    </div>
-                    <input type="file" id="refFileInput" accept="image/png,image/jpeg,image/webp">
+                    <input type="file" id="refFileInput" class="sr-only"
+                           accept="image/png,image/jpeg,image/webp" multiple
+                           aria-label="Choose reference images">
                 </div>
+                <div id="refList" class="ref-list" style="margin-top:0.75rem;"></div>
             </div>
             <div class="license-notice">
                 MangaNinja is licensed under
@@ -60,41 +104,90 @@
             </div>
         </div>
 
-        <div class="form-group mt-2">
-            <label>Comic Style</label>
-            <div class="radio-group">
-                <label><input type="radio" name="style" value="auto" checked> Auto-detect</label>
-                <label><input type="radio" name="style" value="western"> Western</label>
-                <label><input type="radio" name="style" value="manga"> Manga</label>
+        <!-- Style preset -->
+        <fieldset class="form-group mt-2">
+            <legend>Style Preset</legend>
+            <div class="preset-grid" id="styleGrid">
+                {% for s in styles %}
+                <label class="preset-card">
+                    <input type="radio" name="style" value="{{ s.key }}"
+                           {% if s.key == 'neutral' %}checked{% endif %}>
+                    <div class="preset-card-body">
+                        <div class="preset-label">{{ s.label }}</div>
+                        <div class="preset-desc">{{ s.description }}</div>
+                    </div>
+                </label>
+                {% endfor %}
             </div>
+        </fieldset>
+
+        <!-- Quality preset -->
+        <fieldset class="form-group mt-2">
+            <legend>Quality Preset</legend>
+            <div class="preset-grid quality-grid" id="qualityGrid">
+                {% for q in qualities %}
+                <label class="preset-card">
+                    <input type="radio" name="quality" value="{{ q.key }}"
+                           {% if q.key == 'standard' %}checked{% endif %}>
+                    <div class="preset-card-body">
+                        <div class="preset-label">{{ q.label }}</div>
+                        <div class="preset-desc">{{ q.description }}</div>
+                        <div class="preset-meta">~{{ q.seconds_per_page_estimate }}s / page</div>
+                    </div>
+                </label>
+                {% endfor %}
+            </div>
+            <p class="hint"><span id="timeEstimate"></span></p>
+        </fieldset>
+
+        <!-- Comic style hint (used by panel detector reading order) -->
+        <fieldset class="form-group mt-2">
+            <legend>Reading Order</legend>
+            <div class="radio-group">
+                <label><input type="radio" name="style_label" value="auto" checked> Auto-detect</label>
+                <label><input type="radio" name="style_label" value="western"> Western (LtR)</label>
+                <label><input type="radio" name="style_label" value="manga"> Manga (RtL)</label>
+            </div>
+        </fieldset>
+
+        <!-- CMYK option -->
+        <div class="form-group mt-2">
+            <label>
+                <input type="checkbox" id="cmykExport">
+                Print-ready CMYK TIFF sample (first page) — for offset printing
+            </label>
         </div>
 
-        <div class="form-group mt-2">
-            <label>Device</label>
+        <!-- Device -->
+        <fieldset class="form-group mt-2">
+            <legend>Device</legend>
             <div style="margin-bottom:0.5rem;">
-                <button type="button" class="btn btn-secondary" id="detectGpuBtn" style="font-size:0.85rem; padding:0.35rem 0.75rem;">
+                <button type="button" class="btn btn-secondary btn-sm" id="detectGpuBtn">
                     Detect GPU
                 </button>
-                <span id="gpuDetectStatus" class="text-dim" style="margin-left:0.5rem; font-size:0.85rem;"></span>
+                <span id="gpuDetectStatus" class="hint-inline" style="margin-left:0.5rem;"></span>
             </div>
-            <div id="gpuInfoBox" style="display:none; background:var(--bg-secondary); border:1px solid var(--border); border-radius:8px; padding:0.75rem; margin-bottom:0.75rem; font-size:0.85rem;">
-            </div>
+            <div id="gpuInfoBox" class="info-box" hidden></div>
             <div class="radio-group" id="deviceRadios">
-                <label><input type="radio" name="device" value="cpu" checked> CPU</label>
-                <label id="gpuRadioLabel" style="display:none;">
-                    <input type="radio" name="device" value="cuda"> GPU (CUDA)
+                <label><input type="radio" name="device" value="cpu" {% if not cuda_available %}checked{% endif %}> CPU</label>
+                <label id="gpuRadioLabel" {% if not cuda_available %}hidden{% endif %}>
+                    <input type="radio" name="device" value="cuda" {% if cuda_available %}checked{% endif %}> GPU (CUDA)
                 </label>
             </div>
-        </div>
+        </fieldset>
 
         <button class="btn btn-primary mt-2" id="uploadBtn" style="width:100%;" disabled>
             Upload &amp; Colorize
         </button>
+        <p id="submitHint" class="hint text-center" aria-live="polite">Select a PDF to continue</p>
 
-        <div id="uploadProgress" style="display:none;" class="mt-2">
-            <div class="progress-bar"><div class="fill" id="uploadFill"></div></div>
+        <div id="uploadProgress" class="mt-2" hidden>
+            <div class="progress-bar" id="uploadBar" role="progressbar"
+                 aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <div class="fill" id="uploadFill"></div>
+            </div>
             <div class="progress-info">
-                <span id="uploadStatus">Uploading...</span>
+                <span id="uploadStatus" aria-live="polite">Uploading...</span>
             </div>
         </div>
     </div>
@@ -102,5 +195,9 @@
 {% endblock %}
 
 {% block scripts %}
+<script>
+    const QUALITY_PRESETS = {{ qualities | tojson }};
+    const CUDA_AVAILABLE = {{ 'true' if cuda_available else 'false' }};
+</script>
 <script src="{{ url_for('static', filename='js/upload.js') }}"></script>
 {% endblock %}

@@ -53,24 +53,28 @@ class RRDB(nn.Module):
 
 
 class RRDBNet(nn.Module):
-    """Residual-in-Residual Dense Block Network for super-resolution."""
+    """Residual-in-Residual Dense Block Network for super-resolution.
+
+    Module names match the upstream Real-ESRGAN ``RRDBNet`` so
+    ``RealESRGAN_x4plus_anime_6B.pth`` loads with ``strict=True``.
+    Only ``scale=4`` is supported (standard anime checkpoint).
+    """
 
     def __init__(self, num_in_ch: int = 3, num_out_ch: int = 3,
                  scale: int = 4, num_feat: int = 64,
                  num_block: int = 6, num_grow_ch: int = 32):
         super().__init__()
+        if scale != 4:
+            raise ValueError(f"Only scale=4 is supported, got {scale}")
         self.scale = scale
-        num_upsample = int(math.log2(scale))
 
         self.conv_first = nn.Conv2d(num_in_ch, num_feat, 3, 1, 1)
         self.body = nn.Sequential(*(RRDB(num_feat, num_grow_ch) for _ in range(num_block)))
         self.conv_body = nn.Conv2d(num_feat, num_feat, 3, 1, 1)
 
-        # Upsampling
-        self.upsamples = nn.ModuleList()
-        self.up_convs = nn.ModuleList()
-        for _ in range(num_upsample):
-            self.up_convs.append(nn.Conv2d(num_feat, num_feat, 3, 1, 1))
+        # Upsampling — two nearest-neighbor + conv stages for x4 scale
+        self.conv_up1 = nn.Conv2d(num_feat, num_feat, 3, 1, 1)
+        self.conv_up2 = nn.Conv2d(num_feat, num_feat, 3, 1, 1)
 
         self.conv_hr = nn.Conv2d(num_feat, num_feat, 3, 1, 1)
         self.conv_last = nn.Conv2d(num_feat, num_out_ch, 3, 1, 1)
@@ -81,8 +85,8 @@ class RRDBNet(nn.Module):
         body_feat = self.conv_body(self.body(feat))
         feat = feat + body_feat
 
-        for conv in self.up_convs:
-            feat = self.lrelu(conv(F.interpolate(feat, scale_factor=2, mode="nearest")))
+        feat = self.lrelu(self.conv_up1(F.interpolate(feat, scale_factor=2, mode="nearest")))
+        feat = self.lrelu(self.conv_up2(F.interpolate(feat, scale_factor=2, mode="nearest")))
 
         out = self.conv_last(self.lrelu(self.conv_hr(feat)))
         return out
@@ -94,6 +98,8 @@ class RRDBNet(nn.Module):
 def _tile_process(model: RRDBNet, img: torch.Tensor, scale: int,
                   tile_size: int, tile_pad: int, device) -> torch.Tensor:
     """Run *model* on *img* using overlapping tiles to limit VRAM."""
+    # One H2D transfer for the whole image; tiles are sliced on-device
+    img = img.to(device)
     batch, channel, height, width = img.shape
     out_h, out_w = height * scale, width * scale
 
@@ -118,7 +124,7 @@ def _tile_process(model: RRDBNet, img: torch.Tensor, scale: int,
             x_end_pad = min(x_end + tile_pad, width)
             y_end_pad = min(y_end + tile_pad, height)
 
-            tile = img[:, :, y_start_pad:y_end_pad, x_start_pad:x_end_pad].to(device)
+            tile = img[:, :, y_start_pad:y_end_pad, x_start_pad:x_end_pad]
             out_tile = model(tile)
 
             # Output tile boundaries (scaled)
@@ -201,6 +207,7 @@ class Upscaler:
         self._device = device
         print(f"[Upscaler] Real-ESRGAN loaded on {device}")
 
+    @torch.inference_mode()
     def upscale(self, image: np.ndarray) -> np.ndarray:
         """Upscale a BGR uint8 image by the configured scale factor."""
         with self._lock:
@@ -220,11 +227,26 @@ class Upscaler:
             )
             del img_t
 
-            # Clamp on device, then single transfer to CPU
-            output = output.squeeze(0).clamp_(0, 1).float().cpu()
-            result = (output.permute(1, 2, 0).numpy() * 255.0 + 0.5).astype(np.uint8)
+            # Convert to uint8 ON the device — the PCIe transfer is then 4x
+            # smaller than shipping fp32 (and 2x smaller than fp16)
+            output = (output.squeeze(0).clamp_(0, 1)
+                      .mul_(255.0).add_(0.5).to(torch.uint8).cpu())
+            result = output.permute(1, 2, 0).numpy()
             del output
             return np.ascontiguousarray(result[:, :, ::-1])  # RGB -> BGR
+
+    def to_device(self, device: str):
+        """Move the loaded model between devices without reloading."""
+        with self._lock:
+            self._device_str = device
+            if self._model is not None:
+                target = self._resolve_device()
+                if target != self._device:
+                    if target.type == "cuda":
+                        self._model = self._model.half().to(target)
+                    else:
+                        self._model = self._model.float().to(target)
+                    self._device = target
 
     def unload(self):
         """Free GPU memory used by the upscaler model."""
@@ -235,3 +257,26 @@ class Upscaler:
                 gc.collect()
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
+
+
+# ── Shared singleton ─────────────────────────────────────────────────────────
+# Real-ESRGAN weights are re-read from disk and re-uploaded to the GPU for
+# every fresh Upscaler — share one instance across jobs and retries.
+
+_shared_upscaler: Upscaler | None = None
+_shared_lock = threading.Lock()
+
+
+def get_shared_upscaler(*, model_path: str, model_url: str, scale: int = 4,
+                        tile: int = 512, device: str = "auto") -> Upscaler:
+    """Return the process-wide shared Upscaler (created on first use)."""
+    global _shared_upscaler
+    with _shared_lock:
+        if _shared_upscaler is None:
+            _shared_upscaler = Upscaler(
+                model_path=model_path, model_url=model_url,
+                scale=scale, tile=tile, device=device,
+            )
+        elif _shared_upscaler._device_str != device:
+            _shared_upscaler.to_device(device)
+        return _shared_upscaler

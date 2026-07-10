@@ -15,8 +15,6 @@ import os
 import numpy as np
 import cv2
 import torch
-import torch.nn as nn
-from torch.autograd import Variable
 from .models import FFDNet
 from .utils import normalize, variable_to_cv2_image, remove_dataparallel_wrapper, is_rgb
 
@@ -26,7 +24,7 @@ class FFDNetDenoiser:
         self.sigma = _sigma / 255
         self.weights_dir = _weights_dir
         self.channels = _in_ch
-        self.device = _device
+        self.device = torch.device(_device) if isinstance(_device, str) else _device
 
         self.model = FFDNet(num_input_channels=_in_ch)
         self.load_weights()
@@ -35,19 +33,22 @@ class FFDNetDenoiser:
     def load_weights(self):
         weights_name = 'net_rgb.pth' if self.channels == 3 else 'net_gray.pth'
         weights_path = os.path.join(self.weights_dir, weights_name)
-        if self.device == 'cuda':
-            state_dict = torch.load(weights_path, map_location=torch.device('cpu'),
-                                    weights_only=False)
-            device_ids = [0]
-            self.model = nn.DataParallel(self.model, device_ids=device_ids).cuda()
-        else:
-            state_dict = torch.load(weights_path, map_location='cpu',
-                                    weights_only=False)
-            # CPU mode: remove the DataParallel wrapper
-            state_dict = remove_dataparallel_wrapper(state_dict)
+        state_dict = torch.load(weights_path, map_location='cpu',
+                                weights_only=False)
+        # Weights were saved wrapped in DataParallel; load into the bare model
+        # (no DataParallel — it only adds scatter/gather overhead on 1 GPU).
+        state_dict = remove_dataparallel_wrapper(state_dict)
         self.model.load_state_dict(state_dict)
+        self.model = self.model.to(self.device)
 
-    def get_denoised_image(self, imorig, sigma=None):
+    def to(self, device):
+        """Move the denoiser between devices (used for CPU parking)."""
+        self.device = torch.device(device) if isinstance(device, str) else device
+        self.model = self.model.to(self.device)
+        return self
+
+    @torch.no_grad()
+    def get_denoised_image(self, imorig, sigma=None, max_edge=1200):
 
         if sigma is not None:
             cur_sigma = sigma / 255
@@ -59,8 +60,8 @@ class FFDNetDenoiser:
 
         imorig = imorig[..., :3]
 
-        if (max(imorig.shape[0], imorig.shape[1]) > 1200):
-            ratio = max(imorig.shape[0], imorig.shape[1]) / 1200
+        if max_edge and max(imorig.shape[0], imorig.shape[1]) > max_edge:
+            ratio = max(imorig.shape[0], imorig.shape[1]) / max_edge
             imorig = cv2.resize(imorig, (int(imorig.shape[1] / ratio), int(imorig.shape[0] / ratio)),
                                 interpolation=cv2.INTER_AREA)
 
@@ -82,32 +83,17 @@ class FFDNetDenoiser:
             expanded_w = True
             imorig = np.concatenate((imorig, imorig[:, :, :, -1][:, :, :, np.newaxis]), axis=3)
 
-        imorig = torch.Tensor(imorig)
+        imnoisy = torch.from_numpy(np.ascontiguousarray(imorig)).float().to(self.device)
+        nsigma = torch.tensor([cur_sigma], dtype=torch.float32, device=self.device)
 
-        # Sets data type according to CPU or GPU modes
-        if self.device == 'cuda':
-            dtype = torch.cuda.FloatTensor
-        else:
-            dtype = torch.FloatTensor
-
-        imnoisy = imorig.clone()
-
-        with torch.no_grad():
-            imorig, imnoisy = imorig.type(dtype), imnoisy.type(dtype)
-            nsigma = torch.FloatTensor([cur_sigma]).type(dtype)
-
-        # Estimate noise and subtract it to the input image
+        # Estimate noise and subtract it from the input image
         im_noise_estim = self.model(imnoisy, nsigma)
         outim = torch.clamp(imnoisy - im_noise_estim, 0., 1.)
 
         if expanded_h:
-            imorig = imorig[:, :, :-1, :]
             outim = outim[:, :, :-1, :]
-            imnoisy = imnoisy[:, :, :-1, :]
 
         if expanded_w:
-            imorig = imorig[:, :, :, :-1]
             outim = outim[:, :, :, :-1]
-            imnoisy = imnoisy[:, :, :, :-1]
 
         return variable_to_cv2_image(outim)

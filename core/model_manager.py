@@ -1,7 +1,8 @@
-"""VRAM-aware model manager — only one colorizer loaded at a time.
+"""VRAM-aware model manager — only one colorizer on the GPU at a time.
 
 Designed for 8 GB GPUs where mc-v2 (~3 GB) and MangaNinja (~6 GB)
-cannot coexist simultaneously.
+cannot coexist simultaneously.  Evicted models are parked on CPU RAM
+(not destroyed) so switching modes back is seconds, not minutes.
 """
 
 import gc
@@ -20,7 +21,7 @@ class ModelManager:
 
         manager = ModelManager(device="auto")
         colorizer = manager.get_colorizer("auto")       # loads mc-v2
-        colorizer = manager.get_colorizer("reference")   # unloads mc-v2, loads MangaNinja
+        colorizer = manager.get_colorizer("reference")   # parks mc-v2 on CPU, loads MangaNinja
     """
 
     def __init__(self, device: str = "auto"):
@@ -28,6 +29,7 @@ class ModelManager:
         self._device = device
         self._current_mode: str | None = None
         self._colorizer = None  # MangaColorizer or MangaNinjaColorizer
+        self._parked: dict[str, object] = {}  # mode -> CPU-parked colorizer
 
     @property
     def current_mode(self) -> str | None:
@@ -44,16 +46,18 @@ class ModelManager:
     def cuda_available(self) -> bool:
         return torch.cuda.is_available()
 
-    def _resolve_device(self):
-        if self._device == "auto":
+    def _resolve_device(self, device: str | None = None) -> torch.device:
+        dev = self._device if device is None else device
+        if dev == "auto":
             return torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        return torch.device(self._device)
+        return torch.device(dev)
 
     def get_colorizer(self, mode: str = "auto"):
         """Return the colorizer for *mode*, loading it if necessary.
 
-        If a different mode is currently loaded, it will be unloaded first
-        to free VRAM before loading the requested one.
+        If a different mode is currently loaded, it is parked on CPU first
+        to free VRAM.  A previously parked model for *mode* is revived by
+        moving it back to the target device instead of reloading from disk.
 
         Parameters
         ----------
@@ -64,44 +68,79 @@ class ModelManager:
             if self._current_mode == mode and self._colorizer is not None:
                 return self._colorizer
 
-            # Unload current model
-            self._unload()
+            # Park the current model on CPU (keeps weights in RAM)
+            self._park_current()
 
-            if mode == "auto":
-                self._colorizer = self._load_mcv2()
-            elif mode == "reference":
-                self._colorizer = self._load_manganinja()
-            else:
-                raise ValueError(f"Unknown colorization mode: {mode!r}")
+            # Revive a parked model if we have one for this mode
+            parked = self._parked.pop(mode, None)
+            if parked is not None:
+                try:
+                    if hasattr(parked, "to_device"):
+                        parked.to_device(str(self._resolve_device()))
+                    self._colorizer = parked
+                except Exception as exc:  # revive failed — fall back to fresh load
+                    print(f"[ModelManager] revive of parked {mode!r} failed ({exc}); reloading")
+                    self._destroy(parked)
+                    self._colorizer = None
+
+            if self._colorizer is None:
+                if mode == "auto":
+                    self._colorizer = self._load_mcv2()
+                elif mode == "reference":
+                    self._colorizer = self._load_manganinja()
+                elif mode == "llm":
+                    self._colorizer = self._load_openrouter()
+                else:
+                    raise ValueError(f"Unknown colorization mode: {mode!r}")
 
             self._current_mode = mode
             return self._colorizer
 
     def switch_device(self, device: str):
-        """Change the target device. Reloads the current model if loaded."""
+        """Change the target device. Moves the current model if needed.
+
+        Compares *resolved* devices — "auto" on a CUDA box and "cuda" are
+        the same physical device, so no reload happens.
+        """
         with self._lock:
-            if device == self._device:
+            if self._resolve_device(device) == self._resolve_device():
+                self._device = device  # remember the label, nothing to move
                 return
             self._device = device
+            target = self._resolve_device()
             if self._colorizer is not None:
-                mode = self._current_mode
-                self._unload()
-                # Re-acquire lock is not needed since we're already holding it
-                if mode == "auto":
-                    self._colorizer = self._load_mcv2()
-                elif mode == "reference":
-                    self._colorizer = self._load_manganinja()
-                self._current_mode = mode
-
-    def _unload(self):
-        """Unload current model and flush VRAM."""
-        if self._colorizer is not None:
-            if hasattr(self._colorizer, "unload"):
-                self._colorizer.unload()
-            del self._colorizer
-            self._colorizer = None
-            self._current_mode = None
+                if hasattr(self._colorizer, "to_device"):
+                    self._colorizer.to_device(str(target))
+                elif hasattr(self._colorizer, "switch_device"):
+                    self._colorizer.switch_device(str(target))
             self._flush_vram()
+
+    def _park_current(self):
+        """Move the active colorizer to CPU RAM and remember it."""
+        if self._colorizer is None:
+            return
+        mode = self._current_mode
+        colorizer = self._colorizer
+        self._colorizer = None
+        self._current_mode = None
+        try:
+            if mode is not None and hasattr(colorizer, "to_device"):
+                colorizer.to_device("cpu")
+                self._parked[mode] = colorizer
+            else:
+                self._destroy(colorizer)
+        except Exception as exc:
+            print(f"[ModelManager] CPU-park of {mode!r} failed ({exc}); unloading")
+            self._destroy(colorizer)
+        self._flush_vram()
+
+    @staticmethod
+    def _destroy(colorizer):
+        try:
+            if hasattr(colorizer, "unload"):
+                colorizer.unload()
+        except Exception:
+            pass
 
     @staticmethod
     def _flush_vram():
@@ -134,4 +173,12 @@ class ModelManager:
             config=Config,
         )
         print(f"[ModelManager] MangaNinja loaded on {colorizer.device_name}")
+        return colorizer
+
+    def _load_openrouter(self):
+        """Load the OpenRouter API-backed colorizer."""
+        from core.openrouter_colorizer import build_openrouter_colorizer
+
+        colorizer = build_openrouter_colorizer(Config)
+        print(f"[ModelManager] OpenRouter image mode ready: {Config.OPENROUTER_MODEL}")
         return colorizer

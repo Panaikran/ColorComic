@@ -9,7 +9,7 @@
 </head>
 <body>
     <header class="app-header">
-        <a href="/" style="text-decoration:none;color:inherit">
+        <a href="/" class="header-brand">
             <h1><span>Color</span>Comic</h1>
         </a>
         <div class="header-actions">
@@ -20,7 +20,6 @@
         {% block content %}{% endblock %}
     </main>
 
-    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
     {% block scripts %}{% endblock %}
 </body>
 </html>

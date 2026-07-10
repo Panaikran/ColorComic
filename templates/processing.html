@@ -4,56 +4,66 @@
 {% block content %}
 <div class="container" style="max-width: 900px;">
     <div class="card mt-3 text-center">
-        <h2 style="margin-bottom:1.5rem;">Colorizing Your Comic</h2>
+        <h2 class="card-title">Colorizing Your Comic</h2>
 
         <div id="processingActive">
-            <div class="flex items-center justify-between" style="justify-content:center; gap:0.75rem;">
-                <span class="spinner"></span>
-                <span id="stepText">Starting colorization...</span>
+            <div class="center-row">
+                <span class="spinner" aria-hidden="true"></span>
+                <span id="stepText" aria-live="polite">Preparing…</span>
             </div>
-            <p class="text-dim" style="font-size:0.75rem; margin-top:0.25rem;">
-                Device: <strong>{{ job.device | upper }}</strong>
-            </p>
+            <p class="hint">Device: <strong>{{ job.device | upper }}</strong></p>
+            <p class="hint" id="reconnectNotice" aria-live="polite" hidden>Reconnecting…</p>
 
-            <div class="progress-bar mt-2"><div class="fill" id="colorFill"></div></div>
+            <div class="progress-bar mt-2" id="colorBar" role="progressbar"
+                 aria-label="Colorization progress"
+                 aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+                <div class="fill" id="colorFill"></div>
+            </div>
             <div class="progress-info">
                 <span id="colorCounter">0 / {{ job.page_count }}</span>
                 <span id="colorPct">0%</span>
             </div>
 
-            <div id="previewArea" class="mt-2" style="display:none;">
-                <p class="text-dim" style="font-size:0.85rem; margin-bottom:0.5rem;">
+            <button class="btn btn-secondary mt-2" id="cancelBtn">Cancel job</button>
+
+            <div id="previewArea" class="mt-2" hidden>
+                <p class="hint" style="margin-bottom:0.5rem;">
                     Page <span id="previewPageNum">1</span> result:
                 </p>
-                <div style="display:flex; gap:1rem; justify-content:center; align-items:flex-start; flex-wrap:wrap;">
-                    <div style="text-align:center;">
-                        <div class="text-dim" style="font-size:0.75rem; margin-bottom:0.25rem;">Original</div>
-                        <img id="previewOrigImg"
-                             style="max-width:360px; max-height:500px; border-radius:8px; border:1px solid var(--border); object-fit:contain;">
-                    </div>
-                    <div style="text-align:center;">
-                        <div class="text-dim" style="font-size:0.75rem; margin-bottom:0.25rem;">Colorized</div>
-                        <img id="previewColorImg"
-                             style="max-width:360px; max-height:500px; border-radius:8px; border:1px solid var(--border); object-fit:contain;">
-                    </div>
+                <div class="compare-grid">
+                    <figure class="compare-item">
+                        <figcaption>Original</figcaption>
+                        <img id="previewOrigImg" class="compare-img" alt="Original page">
+                    </figure>
+                    <figure class="compare-item">
+                        <figcaption>Colorized</figcaption>
+                        <img id="previewColorImg" class="compare-img" alt="Colorized page">
+                    </figure>
                 </div>
             </div>
         </div>
 
-        <div id="processingDone" style="display:none;">
-            <div style="font-size:3rem; margin-bottom:1rem;">&#10003;</div>
+        <div id="processingDone" hidden>
+            <div class="result-icon" aria-hidden="true">&#10003;</div>
             <h3>Colorization Complete!</h3>
             <p class="text-dim mt-1">Your comic has been colorized successfully.</p>
-            <div class="flex mt-2" style="justify-content:center; gap:0.75rem;">
+            <div class="flex mt-2" style="justify-content:center; gap:0.75rem; flex-wrap:wrap;">
                 <a href="/api/download/{{ job.job_id }}" class="btn btn-primary">Download Colored PDF</a>
                 <a href="/preview/{{ job.job_id }}" class="btn btn-secondary">Review Pages</a>
             </div>
         </div>
 
-        <div id="processingError" style="display:none;">
-            <div style="font-size:3rem; margin-bottom:1rem;">&#10060;</div>
+        <div id="processingError" role="alert" hidden>
+            <div class="result-icon" aria-hidden="true">&#10060;</div>
             <h3>Error</h3>
             <p class="text-dim mt-1" id="errorText"></p>
+            <a href="/" class="btn btn-secondary mt-2">Back to Upload</a>
+        </div>
+
+        <div id="processingCancelled" hidden>
+            <div class="result-icon" aria-hidden="true">&#9209;</div>
+            <h3>Job cancelled</h3>
+            <p class="text-dim mt-1">Colorization was stopped. No PDF was produced.</p>
             <a href="/" class="btn btn-secondary mt-2">Back to Upload</a>
         </div>
     </div>
@@ -63,54 +73,191 @@
 {% block scripts %}
 <script>
     const JOB_ID = "{{ job.job_id }}";
-    const PAGE_COUNT = {{ job.page_count }};
+    let pageCount = {{ job.page_count }};
 
-    const evtSource = new EventSource(`/api/colorize/${JOB_ID}/stream`);
+    const stepText = document.getElementById('stepText');
+    const reconnectNotice = document.getElementById('reconnectNotice');
+    const colorBar = document.getElementById('colorBar');
+    const colorFill = document.getElementById('colorFill');
+    const colorCounter = document.getElementById('colorCounter');
+    const colorPct = document.getElementById('colorPct');
+    const cancelBtn = document.getElementById('cancelBtn');
+    const previewArea = document.getElementById('previewArea');
 
-    evtSource.onmessage = function(event) {
-        const data = JSON.parse(event.data);
+    const STALE_SSE_MS = 15000;
+    const POLL_INTERVAL_MS = 5000;
+
+    let evtSource = null;
+    let pollTimer = null;
+    let lastEventTime = Date.now();
+    let finished = false;
+
+    function showState(id) {
+        for (const s of ['processingActive', 'processingDone', 'processingError', 'processingCancelled']) {
+            document.getElementById(s).hidden = (s !== id);
+        }
+    }
+
+    function setStep(text) {
+        stepText.textContent = text;
+    }
+
+    function setIndeterminate(on) {
+        colorBar.classList.toggle('indeterminate', on);
+        if (on) {
+            colorFill.style.width = '';
+            colorBar.removeAttribute('aria-valuenow');
+        }
+    }
+
+    // Progress is driven from the monotonic processed_count, never the page index.
+    function setProgress(processed, total) {
+        if (!total) return;
+        setIndeterminate(false);
+        const pct = Math.min(100, Math.round((processed / total) * 100));
+        colorFill.style.width = pct + '%';
+        colorCounter.textContent = `${processed} / ${total}`;
+        colorPct.textContent = pct + '%';
+        colorBar.setAttribute('aria-valuenow', String(pct));
+    }
+
+    function finish(kind, message) {
+        if (finished) return;
+        finished = true;
+        if (evtSource) evtSource.close();
+        if (pollTimer) clearInterval(pollTimer);
+        if (kind === 'done') {
+            showState('processingDone');
+        } else if (kind === 'cancelled') {
+            showState('processingCancelled');
+        } else {
+            document.getElementById('errorText').textContent =
+                message || 'Something went wrong during colorization.';
+            showState('processingError');
+        }
+    }
+
+    function updateThumbs(page) {
+        if (document.hidden) return;  // skip DOM/image work in background tabs
+        previewArea.hidden = false;
+        document.getElementById('previewPageNum').textContent = page + 1;
+        const orig = document.getElementById('previewOrigImg');
+        orig.src = `/pages/${JOB_ID}/${page}`;  // immutable original — never cache-bust
+        orig.alt = `Original page ${page + 1}`;
+        const color = document.getElementById('previewColorImg');
+        color.src = `/api/preview/${JOB_ID}/${page}?w=720`;
+        color.alt = `Colorized page ${page + 1}`;
+    }
+
+    function handleEvent(data) {
+        lastEventTime = Date.now();
+        reconnectNotice.hidden = true;
 
         if (data.heartbeat) return;
+        if (data.cancelled) { finish('cancelled'); return; }
+        if (data.error) { finish('error', data.error); return; }
+        if (data.done) { finish('done'); return; }
 
-        if (data.error) {
-            evtSource.close();
-            document.getElementById('processingActive').style.display = 'none';
-            document.getElementById('processingError').style.display = 'block';
-            document.getElementById('errorText').textContent = data.error;
-            return;
+        switch (data.status) {
+            case 'extracting':
+                setStep('Extracting pages…');
+                setIndeterminate(true);
+                break;
+            case 'loading_model':
+                setStep('Loading model — first run may download weights…');
+                setIndeterminate(true);
+                break;
+            case 'colorizing':
+                if (typeof data.total === 'number') pageCount = data.total;
+                setProgress(data.processed_count || 0, data.total || pageCount);
+                setStep(`Colorizing page ${data.page + 1}…`);
+                break;
+            case 'done_page':
+                if (typeof data.total === 'number') pageCount = data.total;
+                setProgress(data.processed_count, data.total || pageCount);
+                updateThumbs(data.page);
+                break;
+            case 'assembling':
+                setStep('Assembling PDF…');
+                break;
         }
+    }
 
-        if (data.done) {
-            evtSource.close();
-            document.getElementById('processingActive').style.display = 'none';
-            document.getElementById('processingDone').style.display = 'block';
-            return;
+    function openStream() {
+        evtSource = new EventSource(`/api/colorize/${JOB_ID}/stream`);
+        evtSource.onopen = () => { reconnectNotice.hidden = true; };
+        evtSource.onmessage = event => {
+            let data;
+            try { data = JSON.parse(event.data); } catch (err) { return; }
+            handleEvent(data);
+        };
+        // Never close on error — let EventSource auto-reconnect.
+        evtSource.onerror = () => {
+            if (finished) return;
+            if (evtSource.readyState === EventSource.CONNECTING) {
+                reconnectNotice.hidden = false;
+            }
+        };
+    }
+
+    // Returns true when the job reached a terminal state.
+    function applyJobSnapshot(job) {
+        if (job.status === 'done') { finish('done'); return true; }
+        if (job.status === 'error') { finish('error', job.error); return true; }
+        if (job.status === 'cancelled') { finish('cancelled'); return true; }
+
+        if (job.page_count) pageCount = job.page_count;
+        if (job.status === 'extracting') {
+            setStep('Extracting pages…');
+            setIndeterminate(true);
+        } else {
+            setProgress(job.processed_count || 0, job.page_count || pageCount);
+            if (job.current_step) setStep(job.current_step);
         }
+        return false;
+    }
 
-        const page = data.page;
-        const total = data.total;
-        const pct = Math.round(((page + 1) / total) * 100);
-
-        document.getElementById('colorFill').style.width = pct + '%';
-        document.getElementById('colorCounter').textContent = `${page + 1} / ${total}`;
-        document.getElementById('colorPct').textContent = pct + '%';
-
-        if (data.status === 'colorizing') {
-            document.getElementById('stepText').textContent = `Colorizing page ${page + 1}...`;
+    cancelBtn.addEventListener('click', async () => {
+        if (!confirm('Cancel this job? Processing stops after the current page.')) return;
+        cancelBtn.disabled = true;
+        cancelBtn.textContent = 'Cancelling…';
+        try {
+            const r = await fetch(`/api/cancel/${JOB_ID}`, { method: 'POST' });
+            if (!r.ok) throw new Error('Cancel request failed');
+            setStep('Cancelling — finishing current page…');
+        } catch (err) {
+            cancelBtn.disabled = false;
+            cancelBtn.textContent = 'Cancel job';
         }
+    });
 
-        if (data.status === 'done_page') {
-            // Show side-by-side preview of the just-completed page
-            const area = document.getElementById('previewArea');
-            area.style.display = 'block';
-            document.getElementById('previewPageNum').textContent = page + 1;
-            document.getElementById('previewOrigImg').src = `/pages/${JOB_ID}/${page}?t=${Date.now()}`;
-            document.getElementById('previewColorImg').src = `/api/preview/${JOB_ID}/${page}?t=${Date.now()}`;
-        }
-    };
+    (async () => {
+        // Check job state first so a refresh after completion shows the right
+        // screen instead of a false "no active job" error.
+        try {
+            const r = await fetch(`/api/job/${JOB_ID}`);
+            if (r.ok) {
+                const job = await r.json();
+                if (applyJobSnapshot(job)) return;
+            } else if (r.status === 404) {
+                finish('error', 'This job no longer exists — the server may have restarted. Please upload again.');
+                return;
+            }
+        } catch (err) { /* fall through to the stream */ }
 
-    evtSource.onerror = function() {
-        evtSource.close();
-    };
+        openStream();
+
+        // Polling fallback: if SSE has been silent for a while, refresh from
+        // the job endpoint so progress keeps moving.
+        pollTimer = setInterval(async () => {
+            if (finished) return;
+            if (Date.now() - lastEventTime < STALE_SSE_MS) return;
+            try {
+                const r = await fetch(`/api/job/${JOB_ID}`);
+                if (!r.ok) return;
+                applyJobSnapshot(await r.json());
+            } catch (err) { /* keep waiting for SSE */ }
+        }, POLL_INTERVAL_MS);
+    })();
 </script>
 {% endblock %}

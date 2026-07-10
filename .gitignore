@@ -1,14 +1,38 @@
+# ── Runtime data (per-job uploads, outputs, logs) ──
 uploads/
 output/
+logs/
+
+# ── Secrets & local config ──
+.env
+
+# ── Model weights (auto-downloaded) ──
+models/weights/
+
+# ── Python ──
 __pycache__/
 *.pyc
-.env
 *.egg-info/
 dist/
 build/
 .venv/
 venv/
-models/weights/
-.claude/
-nul
+
+# ── Test assets & scratch artifacts ──
 test files/
+*.tmp
+guided_job_id.tmp
+# Comparison / debug images generated during testing
+ch83_*.jpg
+dial_compare.jpg
+guided_final_compare.jpg
+hint_fix_compare.jpg
+
+# ── Tooling / editor ──
+.claude/
+.playwright-mcp/
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+nul

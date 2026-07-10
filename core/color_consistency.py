@@ -87,12 +87,18 @@ class ColorConsistencyManager:
         # Reinhard transfer — in-place to avoid copies
         # A channel: out = orig + strength * (transferred - orig)
         #          = orig * (1 - strength) + transferred * strength
-        a_scale = self._ref_std_a / src_std_a
+        #
+        # Scale factors are clamped: pages from different scenes have very
+        # different chroma spreads, and an unclamped std ratio flattens (or
+        # explodes) a page's palette into the anchor's — the "one color
+        # spread across every page" failure.  Means are still matched, so
+        # cross-page tone stays coherent without homogenizing hue variety.
+        a_scale = float(np.clip(self._ref_std_a / src_std_a, 0.75, 1.35))
         a_shift = self._ref_mean_a - src_mean_a * a_scale
         lab[:, :, 1] += strength * (lab[:, :, 1] * (a_scale - 1.0) + a_shift)
 
         # B channel
-        b_scale = self._ref_std_b / src_std_b
+        b_scale = float(np.clip(self._ref_std_b / src_std_b, 0.75, 1.35))
         b_shift = self._ref_mean_b - src_mean_b * b_scale
         lab[:, :, 2] += strength * (lab[:, :, 2] * (b_scale - 1.0) + b_shift)
 

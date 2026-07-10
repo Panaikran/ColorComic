@@ -3,37 +3,95 @@
 
 {% block content %}
 <div class="container-wide">
+    <div id="jobExpiredBanner" class="banner-error" role="alert" hidden>
+        This job has expired or the server was restarted.
+        <a href="/">Upload your comic again</a> to continue.
+    </div>
+
     <div class="toolbar">
         <div class="left">
-            <h2>Colorized Preview</h2>
+            <h2>Preview</h2>
             <div class="view-toggle" id="viewToggle">
-                <button class="active" data-mode="side-by-side">Side by Side</button>
-                <button data-mode="colored">Colored Only</button>
-                <button data-mode="original">Original</button>
+                <button class="active" data-mode="ab-slider" aria-pressed="true">A/B Slider</button>
+                <button data-mode="side-by-side" aria-pressed="false">Side by Side</button>
+                <button data-mode="colored" aria-pressed="false">Colored</button>
+                <button data-mode="original" aria-pressed="false">Original</button>
             </div>
+            <div id="qualityBadge" class="quality-badge"></div>
         </div>
         <div class="right">
             <div class="page-nav">
                 <button class="btn btn-secondary btn-sm" id="prevPage">&larr; Prev</button>
-                <span>Page <input type="number" id="pageNumInput" value="1" min="1" max="{{ job.page_count }}"> / {{ job.page_count }}</span>
+                <span>Page <input type="number" id="pageNumInput" value="1" min="1" max="{{ job.page_count }}" aria-label="Page number"> / {{ job.page_count }}</span>
                 <button class="btn btn-secondary btn-sm" id="nextPage">Next &rarr;</button>
             </div>
             <a href="/api/download/{{ job.job_id }}" class="btn btn-primary">Download PDF</a>
         </div>
     </div>
 
+    <!-- Touch-up + retry toolbar -->
+    <div class="editor-bar">
+        <div class="editor-bar-section">
+            <button class="btn btn-secondary btn-sm" id="touchupToggle" aria-pressed="false">Touch-up mode</button>
+            <input type="color" id="touchupColor" value="#ff5252" aria-label="Touch-up fill color">
+            <label class="hint-inline">
+                Tolerance <input type="number" id="touchupTol" value="18" min="1" max="80" class="w-60">
+            </label>
+            <button class="btn btn-secondary btn-sm" id="undoBtn" disabled>Undo</button>
+            <span id="touchupHint" class="hint-inline" hidden>
+                Armed — click a region on the colorized image to flood-fill it.
+            </span>
+            <span id="touchupStatus" class="hint-inline" aria-live="polite"></span>
+        </div>
+        <div class="editor-bar-section">
+            <strong>Retry page with:</strong>
+            <select id="retryStyle" aria-label="Retry style"></select>
+            <select id="retryQuality" aria-label="Retry quality"></select>
+            <label class="hint-inline">
+                Saturation <input type="number" id="retrySat" step="0.1" value="" placeholder="—" class="w-60">
+            </label>
+            <button class="btn btn-secondary btn-sm" id="retryBtn">Re-roll</button>
+            <span id="retryStatus" class="hint-inline" aria-live="polite"></span>
+        </div>
+        <div class="editor-bar-section">
+            <button class="btn btn-secondary btn-sm" id="cmykBtn">Export this page as CMYK TIFF</button>
+            <span id="cmykStatus" class="hint-inline" aria-live="polite"></span>
+        </div>
+    </div>
+
+    <div id="pageError" class="banner-error" role="alert" hidden>
+        This page isn't ready yet or the job has expired — re-upload if the server restarted.
+    </div>
+
     <div id="viewContainer">
-        <div class="side-by-side" id="sideBySide">
+        <!-- A/B slider view -->
+        <div class="ab-slider-wrap" id="abSliderWrap">
+            <div class="ab-slider" id="abSlider">
+                <img id="abOriginal" class="ab-bottom" src="/pages/{{ job.job_id }}/0" alt="Original page">
+                <div id="abColoredWrap" class="ab-top">
+                    <img id="abColorized" alt="Colorized page">
+                </div>
+                <div class="ab-handle" id="abHandle" tabindex="0" role="slider"
+                     aria-label="Comparison slider position"
+                     aria-valuemin="0" aria-valuemax="100" aria-valuenow="50"></div>
+            </div>
+            <div class="ab-hint" id="abHint">
+                Drag the handle or click the image to compare. Use arrow keys on the handle to nudge it.
+            </div>
+        </div>
+
+        <!-- Side-by-side view -->
+        <div class="side-by-side" id="sideBySide" hidden>
             <div>
                 <div class="label">Original (B&W)</div>
                 <div class="image-viewer">
-                    <img id="originalImg" src="/pages/{{ job.job_id }}/0" alt="Original">
+                    <img id="originalImg" src="/pages/{{ job.job_id }}/0" alt="Original page">
                 </div>
             </div>
             <div>
                 <div class="label">Colorized</div>
                 <div class="image-viewer">
-                    <img id="colorizedImg" src="" alt="Colorized">
+                    <img id="colorizedImg" alt="Colorized page">
                     <div id="previewLoading" class="flex items-center gap-1">
                         <span class="spinner"></span> Loading...
                     </div>
@@ -42,64 +100,458 @@
         </div>
     </div>
 </div>
+
+<!-- Click-to-toggle zoom lightbox -->
+<div id="zoomOverlay" class="zoom-overlay" hidden>
+    <img id="zoomImg" alt="Zoomed page">
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
     const JOB_ID = "{{ job.job_id }}";
     const PAGE_COUNT = {{ job.page_count }};
-
+    let JOB_INFO = null;
     let currentPreviewPage = 0;
+    let viewMode = 'ab-slider';
+    let touchupArmed = false;
+    let pageVersions = {};      // pageIndex(str) -> int, from /api/job + local bumps
+    let canUndoByPage = {};     // pageIndex -> bool
+    const prefetched = new Set();
 
-    function loadPreview(page) {
-        currentPreviewPage = page;
-        document.getElementById('originalImg').src = `/pages/${JOB_ID}/${page}`;
-        document.getElementById('colorizedImg').style.display = 'none';
-        document.getElementById('previewLoading').style.display = 'flex';
-        const img = document.getElementById('colorizedImg');
-        img.onload = () => {
-            img.style.display = 'block';
-            document.getElementById('previewLoading').style.display = 'none';
-        };
-        img.src = `/api/preview/${JOB_ID}/${page}?t=${Date.now()}`;
-        document.getElementById('pageNumInput').value = page + 1;
+    const viewContainer = document.getElementById('viewContainer');
+    const pageError = document.getElementById('pageError');
+    const abSlider = document.getElementById('abSlider');
+    const abHandle = document.getElementById('abHandle');
+    const abColoredWrap = document.getElementById('abColoredWrap');
+    const abOriginal = document.getElementById('abOriginal');
+    const abColorized = document.getElementById('abColorized');
+    const originalImg = document.getElementById('originalImg');
+    const colorizedImg = document.getElementById('colorizedImg');
+    const previewLoading = document.getElementById('previewLoading');
+    const pageNumInput = document.getElementById('pageNumInput');
+    const touchupToggle = document.getElementById('touchupToggle');
+    const touchupHint = document.getElementById('touchupHint');
+    const undoBtn = document.getElementById('undoBtn');
+    const retryBtn = document.getElementById('retryBtn');
+    const cmykBtn = document.getElementById('cmykBtn');
+    const zoomOverlay = document.getElementById('zoomOverlay');
+    const zoomImg = document.getElementById('zoomImg');
+
+    // ── Job info + versions ────────────────────────────────────────────
+    function pageVersion(page) {
+        return pageVersions[String(page)] || 0;
     }
 
+    function previewUrl(page) {
+        return `/api/preview/${JOB_ID}/${page}?v=${pageVersion(page)}`;
+    }
+
+    async function loadJob() {
+        try {
+            const r = await fetch(`/api/job/${JOB_ID}`);
+            if (!r.ok) {
+                document.getElementById('jobExpiredBanner').hidden = false;
+                return false;
+            }
+            JOB_INFO = await r.json();
+            pageVersions = JOB_INFO.page_versions || {};
+            return true;
+        } catch (err) {
+            document.getElementById('jobExpiredBanner').hidden = false;
+            return false;
+        }
+    }
+
+    async function populateRetrySelectors() {
+        const styleSel = document.getElementById('retryStyle');
+        const qualitySel = document.getElementById('retryQuality');
+        try {
+            const r = await fetch('/api/presets');
+            const presets = await r.json();
+            styleSel.innerHTML = '';
+            qualitySel.innerHTML = '';
+            for (const s of presets.styles) {
+                const opt = document.createElement('option');
+                opt.value = s.key; opt.textContent = s.label;
+                if (s.key === (JOB_INFO?.style || 'neutral')) opt.selected = true;
+                styleSel.appendChild(opt);
+            }
+            for (const q of presets.qualities) {
+                const opt = document.createElement('option');
+                opt.value = q.key; opt.textContent = q.label;
+                if (q.key === (JOB_INFO?.quality || 'standard')) opt.selected = true;
+                qualitySel.appendChild(opt);
+            }
+        } catch (err) {
+            // Fall back to the job's own presets so retry still works.
+            for (const [sel, key] of [[styleSel, JOB_INFO?.style || 'neutral'],
+                                      [qualitySel, JOB_INFO?.quality || 'standard']]) {
+                sel.innerHTML = '';
+                const opt = document.createElement('option');
+                opt.value = key; opt.textContent = key;
+                sel.appendChild(opt);
+            }
+        }
+    }
+
+    // ── Status helpers ─────────────────────────────────────────────────
+    function setStatus(el, text, spinning) {
+        el.textContent = '';
+        if (spinning) {
+            const s = document.createElement('span');
+            s.className = 'spinner spinner-sm';
+            el.appendChild(s);
+            el.appendChild(document.createTextNode(' '));
+        }
+        if (text) el.appendChild(document.createTextNode(text));
+    }
+
+    // ── Page loading ───────────────────────────────────────────────────
+    function showPageError() {
+        pageError.hidden = false;
+    }
+
+    function prefetchAdjacent(page) {
+        for (const p of [page - 1, page + 1]) {
+            if (p < 0 || p >= PAGE_COUNT) continue;
+            const url = previewUrl(p);
+            if (prefetched.has(url)) continue;
+            prefetched.add(url);
+            new Image().src = url;
+        }
+    }
+
+    function loadPreview(page) {
+        page = Math.max(0, Math.min(PAGE_COUNT - 1, page));
+        currentPreviewPage = page;
+        pageError.hidden = true;
+
+        // Originals are immutable — never cache-bust.
+        originalImg.src = `/pages/${JOB_ID}/${page}`;
+        abOriginal.src = `/pages/${JOB_ID}/${page}`;
+
+        const url = previewUrl(page);
+
+        colorizedImg.style.display = 'none';
+        previewLoading.style.display = 'flex';
+        colorizedImg.onload = () => {
+            colorizedImg.style.display = 'block';
+            previewLoading.style.display = 'none';
+            prefetchAdjacent(page);
+        };
+        colorizedImg.src = url;
+
+        abColorized.onload = () => { prefetchAdjacent(page); };
+        abColorized.src = url;
+
+        pageNumInput.value = page + 1;
+        undoBtn.disabled = !canUndoByPage[page];
+        renderQualityBadge();
+    }
+
+    for (const img of [abOriginal, abColorized, originalImg, colorizedImg]) {
+        img.onerror = () => {
+            if (!img.getAttribute('src')) return;
+            previewLoading.style.display = 'none';
+            showPageError();
+        };
+    }
+
+    function renderQualityBadge() {
+        const badge = document.getElementById('qualityBadge');
+        if (!JOB_INFO || !JOB_INFO.page_quality || !JOB_INFO.page_quality[currentPreviewPage]) {
+            badge.textContent = '';
+            badge.className = 'quality-badge';
+            return;
+        }
+        const q = JOB_INFO.page_quality[currentPreviewPage];
+        let cls = 'quality-good';
+        if (q.score < 60) cls = 'quality-poor';
+        else if (q.score < 80) cls = 'quality-ok';
+        badge.className = `quality-badge ${cls}`;
+        const issues = q.issues && q.issues.length ? ` — ${q.issues.join(', ')}` : '';
+        badge.textContent = `Quality ${q.score}/100${issues}`;
+    }
+
+    // ── Page navigation ────────────────────────────────────────────────
     document.getElementById('prevPage').onclick = () => {
         if (currentPreviewPage > 0) loadPreview(currentPreviewPage - 1);
     };
     document.getElementById('nextPage').onclick = () => {
         if (currentPreviewPage < PAGE_COUNT - 1) loadPreview(currentPreviewPage + 1);
     };
-    document.getElementById('pageNumInput').onchange = (e) => {
-        const p = Math.max(0, Math.min(PAGE_COUNT - 1, parseInt(e.target.value) - 1));
-        loadPreview(p);
+    pageNumInput.onchange = (e) => {
+        const v = parseInt(e.target.value, 10);
+        if (Number.isNaN(v)) {
+            e.target.value = currentPreviewPage + 1;
+            return;
+        }
+        loadPreview(v - 1);  // loadPreview clamps to range
     };
 
-    // View toggle
+    // Keyboard navigation (guarded when typing in a field or on the slider handle)
+    document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && !zoomOverlay.hidden) {
+            closeZoom();
+            return;
+        }
+        const t = e.target;
+        if (t === abHandle) return;
+        if (t.tagName === 'INPUT' || t.tagName === 'SELECT' || t.tagName === 'TEXTAREA' || t.isContentEditable) return;
+        if (e.key === 'ArrowLeft' && currentPreviewPage > 0) {
+            loadPreview(currentPreviewPage - 1);
+        } else if (e.key === 'ArrowRight' && currentPreviewPage < PAGE_COUNT - 1) {
+            loadPreview(currentPreviewPage + 1);
+        }
+    });
+
+    // ── View toggle ────────────────────────────────────────────────────
     document.querySelectorAll('#viewToggle button').forEach(btn => {
         btn.onclick = () => {
-            document.querySelectorAll('#viewToggle button').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('#viewToggle button').forEach(b => {
+                b.classList.remove('active');
+                b.setAttribute('aria-pressed', 'false');
+            });
             btn.classList.add('active');
-            const mode = btn.dataset.mode;
-            const container = document.getElementById('sideBySide');
-            if (mode === 'side-by-side') {
-                container.style.gridTemplateColumns = '1fr 1fr';
-                container.children[0].style.display = '';
-                container.children[1].style.display = '';
-            } else if (mode === 'colored') {
-                container.style.gridTemplateColumns = '1fr';
-                container.children[0].style.display = 'none';
-                container.children[1].style.display = '';
-            } else {
-                container.style.gridTemplateColumns = '1fr';
-                container.children[0].style.display = '';
-                container.children[1].style.display = 'none';
+            btn.setAttribute('aria-pressed', 'true');
+            viewMode = btn.dataset.mode;
+            const ab = document.getElementById('abSliderWrap');
+            const sbs = document.getElementById('sideBySide');
+            ab.hidden = viewMode !== 'ab-slider';
+            sbs.hidden = viewMode === 'ab-slider';
+            if (viewMode === 'side-by-side') {
+                sbs.classList.remove('cols-1');
+                sbs.children[0].hidden = false;
+                sbs.children[1].hidden = false;
+            } else if (viewMode === 'colored') {
+                sbs.classList.add('cols-1');
+                sbs.children[0].hidden = true;
+                sbs.children[1].hidden = false;
+            } else if (viewMode === 'original') {
+                sbs.classList.add('cols-1');
+                sbs.children[0].hidden = false;
+                sbs.children[1].hidden = true;
             }
         };
     });
 
-    // Init
-    loadPreview(0);
+    // ── A/B slider (pointer events, works on touch) ────────────────────
+    let dragging = false;
+    let sliderPct = 50;
+
+    function setSlider(pct) {
+        sliderPct = Math.max(0, Math.min(100, pct));
+        abColoredWrap.style.clipPath = `inset(0 ${100 - sliderPct}% 0 0)`;
+        abHandle.style.left = `${sliderPct}%`;
+        abHandle.setAttribute('aria-valuenow', String(Math.round(sliderPct)));
+    }
+    setSlider(50);
+
+    function sliderPctFromEvent(e) {
+        const rect = abSlider.getBoundingClientRect();
+        return ((e.clientX - rect.left) / rect.width) * 100;
+    }
+
+    abSlider.addEventListener('pointerdown', (e) => {
+        // When touch-up is armed, clicks on the colored side are fills —
+        // only the handle itself still drags.
+        if (touchupArmed && e.target !== abHandle) return;
+        dragging = true;
+        abSlider.setPointerCapture(e.pointerId);
+        setSlider(sliderPctFromEvent(e));
+        e.preventDefault();
+    });
+    abSlider.addEventListener('pointermove', (e) => {
+        if (!dragging) return;
+        setSlider(sliderPctFromEvent(e));
+    });
+    abSlider.addEventListener('pointerup', () => { dragging = false; });
+    abSlider.addEventListener('pointercancel', () => { dragging = false; });
+
+    abHandle.addEventListener('keydown', (e) => {
+        if (e.key === 'ArrowLeft') {
+            setSlider(sliderPct - 2);
+            e.preventDefault();
+            e.stopPropagation();
+        } else if (e.key === 'ArrowRight') {
+            setSlider(sliderPct + 2);
+            e.preventDefault();
+            e.stopPropagation();
+        }
+    });
+
+    // ── Zoom (click-to-toggle lightbox) ────────────────────────────────
+    function openZoom(src, alt) {
+        if (!src) return;
+        zoomImg.src = src;
+        zoomImg.alt = alt || 'Zoomed page';
+        zoomOverlay.hidden = false;
+        document.body.style.overflow = 'hidden';
+    }
+    function closeZoom() {
+        zoomOverlay.hidden = true;
+        zoomImg.removeAttribute('src');
+        document.body.style.overflow = '';
+    }
+    zoomOverlay.addEventListener('click', closeZoom);
+
+    originalImg.addEventListener('click', () => {
+        openZoom(originalImg.currentSrc, originalImg.alt);
+    });
+
+    // ── Touch-up (opt-in) ──────────────────────────────────────────────
+    let touchupBusy = false;
+
+    touchupToggle.addEventListener('click', () => {
+        touchupArmed = !touchupArmed;
+        touchupToggle.setAttribute('aria-pressed', String(touchupArmed));
+        viewContainer.classList.toggle('touchup-armed', touchupArmed);
+        touchupHint.hidden = !touchupArmed;
+        document.getElementById('abHint').textContent = touchupArmed
+            ? 'Touch-up armed — click the colored side to flood-fill. Drag the handle to compare.'
+            : 'Drag the handle or click the image to compare. Use arrow keys on the handle to nudge it.';
+    });
+
+    abColorized.addEventListener('click', (e) => {
+        if (touchupArmed) applyTouchup(e, abColorized);
+    });
+    colorizedImg.addEventListener('click', (e) => {
+        if (touchupArmed) applyTouchup(e, colorizedImg);
+        else openZoom(colorizedImg.currentSrc, colorizedImg.alt);
+    });
+
+    async function applyTouchup(event, imgEl) {
+        if (touchupBusy || !imgEl || !imgEl.naturalWidth) return;
+        // Map the click to full-res pixel coords via the rendered rect.
+        const rect = imgEl.getBoundingClientRect();
+        const x = Math.max(0, Math.min(imgEl.naturalWidth - 1,
+            Math.round((event.clientX - rect.left) * (imgEl.naturalWidth / rect.width))));
+        const y = Math.max(0, Math.min(imgEl.naturalHeight - 1,
+            Math.round((event.clientY - rect.top) * (imgEl.naturalHeight / rect.height))));
+        const color = document.getElementById('touchupColor').value;
+        const tolerance = parseInt(document.getElementById('touchupTol').value, 10) || 18;
+        const status = document.getElementById('touchupStatus');
+        const page = currentPreviewPage;
+
+        touchupBusy = true;
+        touchupToggle.disabled = true;
+        undoBtn.disabled = true;
+        setStatus(status, 'Filling…', true);
+        try {
+            const r = await fetch(`/api/touchup/${JOB_ID}/${page}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ x, y, color, tolerance }),
+            });
+            const data = await r.json();
+            if (!r.ok || data.error) {
+                setStatus(status, data.error || 'Touch-up failed.');
+                return;
+            }
+            if (typeof data.version === 'number') pageVersions[String(page)] = data.version;
+            canUndoByPage[page] = !!data.can_undo;
+            setStatus(status, 'Done.');
+            loadPreview(page);
+        } catch (err) {
+            setStatus(status, 'Touch-up failed.');
+        } finally {
+            touchupBusy = false;
+            touchupToggle.disabled = false;
+            undoBtn.disabled = !canUndoByPage[currentPreviewPage];
+        }
+    }
+
+    // ── Undo ───────────────────────────────────────────────────────────
+    undoBtn.addEventListener('click', async () => {
+        const status = document.getElementById('touchupStatus');
+        const page = currentPreviewPage;
+        undoBtn.disabled = true;
+        setStatus(status, 'Undoing…', true);
+        try {
+            const r = await fetch(`/api/undo/${JOB_ID}/${page}`, { method: 'POST' });
+            const data = await r.json();
+            if (!r.ok || data.error) {
+                setStatus(status, data.error || 'Undo failed.');
+                canUndoByPage[page] = false;
+                return;
+            }
+            if (typeof data.version === 'number') pageVersions[String(page)] = data.version;
+            canUndoByPage[page] = !!data.can_undo;
+            setStatus(status, 'Undone.');
+            loadPreview(page);
+        } catch (err) {
+            setStatus(status, 'Undo failed.');
+        } finally {
+            undoBtn.disabled = !canUndoByPage[currentPreviewPage];
+        }
+    });
+
+    // ── Retry ──────────────────────────────────────────────────────────
+    retryBtn.addEventListener('click', async () => {
+        const status = document.getElementById('retryStatus');
+        const page = currentPreviewPage;
+        const body = {
+            style: document.getElementById('retryStyle').value,
+            quality: document.getElementById('retryQuality').value,
+        };
+        const sat = document.getElementById('retrySat').value;
+        if (sat) body.saturation_boost = parseFloat(sat);
+
+        retryBtn.disabled = true;
+        setStatus(status, 'Re-rolling…', true);
+        try {
+            const r = await fetch(`/api/retry/${JOB_ID}/${page}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+            const data = await r.json();
+            if (!r.ok || data.error) {
+                setStatus(status, data.error || 'Retry failed.');
+                return;
+            }
+            setStatus(status, 'Done.');
+            await loadJob();  // refresh quality scores + server-side versions
+            if (typeof data.version === 'number') pageVersions[String(page)] = data.version;
+            canUndoByPage[page] = !!data.can_undo;
+            loadPreview(page);
+        } catch (err) {
+            setStatus(status, 'Retry failed.');
+        } finally {
+            retryBtn.disabled = false;
+        }
+    });
+
+    // ── CMYK ───────────────────────────────────────────────────────────
+    cmykBtn.addEventListener('click', async () => {
+        const status = document.getElementById('cmykStatus');
+        cmykBtn.disabled = true;
+        setStatus(status, 'Converting…', true);
+        try {
+            const r = await fetch(`/api/cmyk/${JOB_ID}/${currentPreviewPage}`, { method: 'POST' });
+            const data = await r.json();
+            if (!r.ok || data.error) {
+                setStatus(status, data.error || 'CMYK export failed.');
+                return;
+            }
+            status.textContent = '';
+            const link = document.createElement('a');
+            link.href = data.download_url;
+            link.textContent = 'Download TIFF';
+            status.appendChild(link);
+        } catch (err) {
+            setStatus(status, 'CMYK export failed.');
+        } finally {
+            cmykBtn.disabled = false;
+        }
+    });
+
+    // ── Init ──────────────────────────────────────────────────────────
+    (async () => {
+        const ok = await loadJob();
+        await populateRetrySelectors();
+        if (ok) loadPreview(0);
+    })();
 </script>
 {% endblock %}

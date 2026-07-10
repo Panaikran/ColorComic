@@ -43,10 +43,19 @@ class MangaColorizator:
         if size % 32 != 0:
             raise RuntimeError("size is not divisible by 32")
 
-        if apply_denoise:
-            image = self.denoiser.get_denoised_image(image, sigma=denoise_sigma)
-
+        # Resize to model size FIRST, then denoise — denoising at the model
+        # resolution instead of up-to-1200px avoids wasted FFDNet compute.
         image, self.current_pad = resize_pad(image, size)
+
+        if apply_denoise and denoise_sigma > 0:
+            # resize_pad returns (H, W, 1); the denoiser expects 2-D or (H, W, 3)
+            den_in = image[:, :, 0] if (image.ndim == 3 and image.shape[2] == 1) else image
+            image = self.denoiser.get_denoised_image(den_in, sigma=denoise_sigma,
+                                                     max_edge=None)
+            if image.ndim == 2:
+                image = image[:, :, None]
+            elif image.shape[2] > 1:
+                image = image[:, :, :1]
 
         self.current_image = transform(image).unsqueeze(0).to(self.device)
         self.current_hint = torch.zeros(1, 4, self.current_image.shape[2],
