@@ -25,6 +25,7 @@ class JobState(BaseModel):
     colorized_images: list[str] = []
     output_pdf: Optional[str] = None
     status: str = "uploaded"
+    error: Optional[str] = None
     progress: float = 0.0
     current_step: str = ""
     eta_seconds: Optional[float] = None

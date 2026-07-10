@@ -20,13 +20,18 @@ from datetime import datetime, timezone
 
 from config import Config
 from core.batch_queue import (
+    BatchRecord,
     BatchQueueError,
     STATUS_CANCELLED,
     STATUS_COMPLETED,
+    STATUS_FAILED,
+    STATUS_PAUSED,
     STATUS_QUEUED,
+    STATUS_RECOVERY_REQUIRED,
     STATUS_RUNNING,
     SingleWorkerBatchRunner,
     create_batch,
+    derive_batch_status,
     transition_job,
 )
 from core.job_history import (
@@ -40,6 +45,7 @@ from core.diagnostics_bundle import create_diagnostics_bundle
 from core.device_detection import detect_device_capabilities, is_official_cpu_build, resolve_compute_device
 from core.preflight import PreflightResult, validate_colorize_preflight, validate_runtime_health
 from core.preferences import load_preferences, reset_preferences, save_preferences
+from core.queue_manifest import load_queue_manifest
 
 
 jobs = {}
@@ -279,6 +285,80 @@ def _is_runtime_output_path(path: str, output_folder: str | None = None) -> bool
     except ValueError:
         return False
     return os.path.normcase(common) == os.path.normcase(output_root)
+
+
+def _is_runtime_upload_path(path: str) -> bool:
+    if not path:
+        return False
+    upload_root = os.path.abspath(Config.UPLOAD_FOLDER)
+    candidate = os.path.abspath(path)
+    try:
+        common = os.path.commonpath([upload_root, candidate])
+    except ValueError:
+        return False
+    return os.path.normcase(common) == os.path.normcase(upload_root)
+
+
+def _recovery_input_error(record) -> str | None:
+    if not _is_runtime_upload_path(record.pdf_path) or not os.path.isfile(record.pdf_path):
+        return "Source PDF is unavailable after restart."
+    if len(record.page_images) != record.page_count:
+        return "Required extracted pages are unavailable after restart."
+    for page_path in record.page_images:
+        if not _is_runtime_upload_path(page_path) or not os.path.isfile(page_path):
+            return "Required extracted page is unavailable after restart."
+    return None
+
+
+def restore_queue_manifest(path: str | None = None) -> int:
+    """Restore manifest-backed queue records without starting any work."""
+    manifest = load_queue_manifest(path)
+    if manifest is None:
+        return 0
+
+    from models.schemas import JobState
+
+    restored = 0
+    with _batch_lock:
+        for saved_batch in manifest.batches:
+            job_statuses = {}
+            for record in saved_batch.jobs:
+                error = _recovery_input_error(record)
+                status = record.status
+                if error:
+                    status = STATUS_RECOVERY_REQUIRED
+                elif status == STATUS_RUNNING:
+                    status = STATUS_RECOVERY_REQUIRED
+                    error = "Colorization was interrupted by application shutdown."
+                elif status not in {STATUS_QUEUED, STATUS_PAUSED, STATUS_FAILED}:
+                    status = STATUS_RECOVERY_REQUIRED
+                    error = "Queue state requires recovery before it can continue."
+
+                jobs[record.job_id] = JobState(
+                    job_id=record.job_id,
+                    pdf_path=record.pdf_path,
+                    page_count=record.page_count,
+                    page_images=list(record.page_images),
+                    status=status,
+                    error=error or record.error,
+                    current_step="recovery" if status == STATUS_RECOVERY_REQUIRED else "",
+                    style=record.style,
+                    device=record.device,
+                    mode=record.mode,
+                )
+                job_statuses[record.job_id] = status
+
+            batches[saved_batch.batch_id] = BatchRecord(
+                batch_id=saved_batch.batch_id,
+                job_ids=saved_batch.job_ids,
+                job_statuses=job_statuses,
+                status=derive_batch_status(job_statuses, started_at=saved_batch.started_at),
+                created_at=saved_batch.created_at,
+                started_at=saved_batch.started_at,
+                completed_at=saved_batch.completed_at,
+            )
+            restored += 1
+    return restored
 
 
 def _recent_job_payload(entry: JobHistoryEntry) -> dict:
@@ -748,6 +828,7 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
     app.secret_key = Config.SECRET_KEY
+    restore_queue_manifest()
 
     @app.route("/")
     def index():

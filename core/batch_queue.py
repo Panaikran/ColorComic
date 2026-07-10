@@ -9,6 +9,7 @@ from typing import Callable, Mapping
 
 STATUS_QUEUED = "queued"
 STATUS_PAUSED = "paused"
+STATUS_RECOVERY_REQUIRED = "recovery_required"
 STATUS_RUNNING = "running"
 STATUS_COMPLETED = "completed"
 STATUS_FAILED = "failed"
@@ -18,6 +19,7 @@ ALLOWED_STATUSES = frozenset(
     {
         STATUS_QUEUED,
         STATUS_PAUSED,
+        STATUS_RECOVERY_REQUIRED,
         STATUS_RUNNING,
         STATUS_COMPLETED,
         STATUS_FAILED,
@@ -35,6 +37,7 @@ TERMINAL_STATUSES = frozenset(
 _JOB_TRANSITIONS = {
     STATUS_QUEUED: frozenset({STATUS_PAUSED, STATUS_RUNNING, STATUS_CANCELLED}),
     STATUS_PAUSED: frozenset({STATUS_QUEUED, STATUS_CANCELLED}),
+    STATUS_RECOVERY_REQUIRED: frozenset(),
     STATUS_RUNNING: frozenset({STATUS_COMPLETED, STATUS_FAILED, STATUS_CANCELLED}),
     STATUS_COMPLETED: frozenset(),
     STATUS_FAILED: frozenset(),
@@ -59,6 +62,7 @@ def utc_now_iso() -> str:
 class BatchCounts:
     queued: int = 0
     paused: int = 0
+    recovery_required: int = 0
     running: int = 0
     completed: int = 0
     failed: int = 0
@@ -66,7 +70,7 @@ class BatchCounts:
 
     @property
     def total(self) -> int:
-        return self.queued + self.paused + self.running + self.completed + self.failed + self.cancelled
+        return self.queued + self.paused + self.recovery_required + self.running + self.completed + self.failed + self.cancelled
 
 
 @dataclass(frozen=True)
@@ -124,6 +128,7 @@ def count_statuses(job_statuses: Mapping[str, str]) -> BatchCounts:
     return BatchCounts(
         queued=counts[STATUS_QUEUED],
         paused=counts[STATUS_PAUSED],
+        recovery_required=counts[STATUS_RECOVERY_REQUIRED],
         running=counts[STATUS_RUNNING],
         completed=counts[STATUS_COMPLETED],
         failed=counts[STATUS_FAILED],
@@ -191,6 +196,9 @@ def derive_batch_status(job_statuses: Mapping[str, str], started_at: str | None 
         if counts.completed > 0:
             return STATUS_COMPLETED
         return STATUS_CANCELLED
+
+    if counts.queued == 0 and counts.recovery_required > 0:
+        return STATUS_RECOVERY_REQUIRED
 
     if counts.queued == 0 and counts.paused > 0:
         return STATUS_PAUSED
