@@ -113,6 +113,15 @@ The CPU installer remains official:
 - `dist/ColorComic`
 - `ColorComic-Setup-{version}-win64-cpu.exe`
 
+CUDA preview release gate:
+
+- The CPU installer remains required and official.
+- The CUDA preview artifact is optional.
+- Do not ship `ColorComic-Setup-0.6.0-win64-cuda-preview.exe` unless CUDA
+  dependency verification, PyInstaller build, Inno build, NVIDIA-machine
+  launch, non-CUDA-machine behavior, model-weight exclusion, and artifact-size
+  recording all pass.
+
 ## Source-Mode CUDA Validation Workflow
 
 This workflow is for developer/source validation only. It does not validate or

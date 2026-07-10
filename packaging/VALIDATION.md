@@ -74,6 +74,55 @@ Expected installer output:
 packaging\inno\output\ColorComic-Setup-0.5.0-win64-cpu.exe
 ```
 
+## CUDA Preview Validation Gate
+
+The CPU installer remains required and official. The CUDA preview artifact is
+optional and must not ship unless every CUDA preview check below passes on
+appropriate hardware.
+
+1. Create and activate a separate CUDA validation environment, for example
+   `.venv-cuda`.
+2. Install `requirements-windows-cuda-experimental.txt`.
+3. Run dependency verification:
+
+   ```powershell
+   .\.venv-cuda\Scripts\python.exe scripts\verify_dependency_imports.py
+   ```
+
+   Expected: Torch reports a CUDA build version, CUDA availability is `True`,
+   GPU names are listed, and VRAM is reported when available.
+4. Build the CUDA preview PyInstaller artifact:
+
+   ```powershell
+   .\packaging\build_windows_cuda_preview.ps1 -PythonExe .\.venv-cuda\Scripts\python.exe
+   ```
+
+   Expected: `dist\ColorComicCudaPreview\ColorComicCudaPreview.exe`.
+5. Build the CUDA preview Inno installer only after the PyInstaller artifact
+   exists and source-mode CUDA validation passes:
+
+   ```powershell
+   ISCC.exe packaging\inno\ColorComicCudaPreview.iss
+   ```
+
+   Expected:
+   `packaging\inno\output\ColorComic-Setup-0.6.0-win64-cuda-preview.exe`.
+6. Launch on an NVIDIA CUDA machine with a compatible driver.
+   Expected: the app opens, `/api/health` works, diagnostics report CUDA
+   capability, and a tiny Auto-mode PDF can complete.
+7. Launch on a non-CUDA machine.
+   Expected: failure behavior is clear and safe, with no silent crash or writes
+   outside `%LOCALAPPDATA%\ColorComic`.
+8. Confirm model weights are excluded from:
+   - `dist\ColorComicCudaPreview`
+   - `ColorComic-Setup-0.6.0-win64-cuda-preview.exe`
+9. Record artifact sizes for:
+   - `dist\ColorComicCudaPreview`
+   - `ColorComic-Setup-0.6.0-win64-cuda-preview.exe`
+
+Do not publish the CUDA preview installer if any CUDA preview gate fails. The
+CPU installer remains the supported release artifact.
+
 ## Clean Windows VM Or Different User
 
 Validate on a clean Windows VM or at least a different Windows user account.
@@ -415,6 +464,8 @@ Do not publish the one-folder build or installer if any of these fail:
   supported in the CPU installer.
 - Experimental CUDA documentation implies a CUDA installer exists, CUDA is
   officially supported, or GPU is selectable in Preferences.
+- CUDA preview validation gate fails, artifact size is not recorded, model
+  weights are bundled, or NVIDIA/non-CUDA machine behavior is not verified.
 - Recent Outputs removal deletes output files instead of only removing history.
 - Batch selected-file preview/removal, Auto-only batch messaging, or narrow-window
   action wrapping fails in the packaged app.

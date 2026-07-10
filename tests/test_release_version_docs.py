@@ -219,6 +219,39 @@ class ReleaseVersionDocsTests(unittest.TestCase):
         self.assertNotIn("win64-cuda-preview", cpu_inno)
         self.assertNotIn("ColorComicCudaPreview", cpu_inno)
 
+    def test_cuda_preview_validation_gate_is_documented(self):
+        validation = self.read_file("packaging", "VALIDATION.md")
+        plan = self.read_file("packaging", "CUDA_BUILD_PLAN.md")
+
+        for expected in (
+            "CUDA Preview Validation Gate",
+            "CPU installer remains required and official",
+            ".venv-cuda",
+            "requirements-windows-cuda-experimental.txt",
+            "scripts\\verify_dependency_imports.py",
+            "build_windows_cuda_preview.ps1 -PythonExe",
+            "dist\\ColorComicCudaPreview\\ColorComicCudaPreview.exe",
+            "ISCC.exe packaging\\inno\\ColorComicCudaPreview.iss",
+            "ColorComic-Setup-0.6.0-win64-cuda-preview.exe",
+            "NVIDIA CUDA machine",
+            "non-CUDA machine",
+            "model weights are excluded",
+            "Record artifact sizes",
+            "must not ship unless every CUDA preview check",
+        ):
+            with self.subTest(expected=expected):
+                self.assertIn(expected, validation)
+
+        for expected in (
+            "CUDA preview release gate",
+            "CPU installer remains required and official",
+            "CUDA preview artifact is optional",
+            "Do not ship `ColorComic-Setup-0.6.0-win64-cuda-preview.exe`",
+            "recording all pass",
+        ):
+            with self.subTest(expected=expected):
+                self.assertIn(expected, plan)
+
     def test_packaging_docs_cover_v050_validation_without_cuda_enablement(self):
         validation = self.read_file("packaging", "VALIDATION.md")
         packaging_readme = self.read_file("packaging", "README.md")
