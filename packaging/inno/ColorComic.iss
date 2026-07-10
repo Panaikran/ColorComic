@@ -3,7 +3,7 @@
 ;   ISCC.exe packaging\inno\ColorComic.iss
 
 #define MyAppName "ColorComic"
-#define MyAppVersion "0.5.0"
+#define MyAppVersion "0.6.0"
 #define MyAppPublisher "ColorComic"
 #define MyAppExeName "ColorComic.exe"
 #define MyAppIcon "..\..\static\img\colorcomic.ico"
