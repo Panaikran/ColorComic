@@ -13,6 +13,9 @@ class ReleaseVersionDocsTests(unittest.TestCase):
         with open(os.path.join(root, *parts), encoding="utf-8") as handle:
             return handle.read()
 
+    def assertInNormalized(self, expected, text):
+        self.assertIn(" ".join(expected.split()), " ".join(text.split()))
+
     def test_inno_version_matches_current_release(self):
         script = self.read_file("packaging", "inno", "ColorComic.iss")
 
@@ -56,7 +59,7 @@ class ReleaseVersionDocsTests(unittest.TestCase):
             "Recent Outputs shows completed batch jobs",
         ):
             with self.subTest(expected=expected):
-                self.assertIn(expected, validation)
+                self.assertInNormalized(expected, validation)
 
         self.assertIn("tests.test_batch_queue", packaging_readme)
         self.assertIn("core\\batch_queue.py", packaging_readme)
@@ -80,7 +83,7 @@ class ReleaseVersionDocsTests(unittest.TestCase):
             "Responsive layout smoke checks",
         ):
             with self.subTest(expected=expected):
-                self.assertIn(expected, validation)
+                self.assertInNormalized(expected, validation)
 
         self.assertIn("tests.test_responsive_layout_css", packaging_readme)
         self.assertIn("v0.4.0 workflow-polish focused tests", packaging_readme)
@@ -235,12 +238,17 @@ class ReleaseVersionDocsTests(unittest.TestCase):
             "ColorComic-Setup-0.6.0-win64-cuda-preview.exe",
             "NVIDIA CUDA machine",
             "non-CUDA machine",
+            "source validation before packaging",
+            "packaged NVIDIA-machine validation before release",
+            "Non-CUDA machine behavior must be acceptable",
+            "CUDA Preferences remain hidden/unsupported in v0.6.0",
             "model weights are excluded",
             "Record artifact sizes",
             "must not ship unless every CUDA preview check",
+            "No GPU/CUDA preference can be saved in v0.6.0",
         ):
             with self.subTest(expected=expected):
-                self.assertIn(expected, validation)
+                self.assertInNormalized(expected, validation)
 
         for expected in (
             "CUDA preview release gate",
@@ -254,6 +262,7 @@ class ReleaseVersionDocsTests(unittest.TestCase):
 
     def test_cuda_preview_preferences_ui_boundary_is_documented(self):
         plan = self.read_file("packaging", "CUDA_BUILD_PLAN.md")
+        packaging_readme = self.read_file("packaging", "README.md")
 
         for expected in (
             "Preferences And UI Boundary Audit",
@@ -268,6 +277,18 @@ class ReleaseVersionDocsTests(unittest.TestCase):
         ):
             with self.subTest(expected=expected):
                 self.assertIn(expected, plan)
+
+        for expected in (
+            "CUDA preview artifacts are optional",
+            "CPU installer remains required and official",
+            "source validation",
+            "packaged NVIDIA-machine validation",
+            "acceptable non-CUDA machine behavior",
+            "CUDA Preferences",
+            "hidden/unsupported",
+        ):
+            with self.subTest(expected=expected):
+                self.assertInNormalized(expected, packaging_readme)
 
     def test_packaging_docs_cover_v050_validation_without_cuda_enablement(self):
         validation = self.read_file("packaging", "VALIDATION.md")
