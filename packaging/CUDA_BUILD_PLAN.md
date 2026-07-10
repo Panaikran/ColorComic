@@ -122,6 +122,28 @@ CUDA preview release gate:
   launch, non-CUDA-machine behavior, model-weight exclusion, and artifact-size
   recording all pass.
 
+## Preferences And UI Boundary Audit
+
+Current state:
+
+- Preferences storage defaults `default_device` to `cpu`.
+- The preferences API accepts only `default_device: "cpu"` from clients.
+- The Preferences panel shows `Device: CPU only` and has no GPU/CUDA control.
+- The upload page has a per-job Detect GPU path with a hidden CUDA radio, but
+  the official CPU installer uses CPU Torch and remains CPU-only in practice.
+- Device diagnostics and model selection already route through centralized
+  device capability and resolution helpers.
+
+To show CUDA only in preview builds, a future slice would need to gate every
+visible CUDA control on the CUDA preview runtime switch and capability result,
+then update preferences validation, normalization, UI copy, and tests together.
+Do not expose CUDA as a saved preference unless fallback behavior and packaged
+preview validation are complete.
+
+Recommendation for v0.6.0: keep CUDA source/env-only. Do not add CUDA to the
+Preferences panel or make it a saved default device. The CPU installer must
+remain CPU-only/read-only.
+
 ## Source-Mode CUDA Validation Workflow
 
 This workflow is for developer/source validation only. It does not validate or

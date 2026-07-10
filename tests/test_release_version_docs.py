@@ -252,6 +252,23 @@ class ReleaseVersionDocsTests(unittest.TestCase):
             with self.subTest(expected=expected):
                 self.assertIn(expected, plan)
 
+    def test_cuda_preview_preferences_ui_boundary_is_documented(self):
+        plan = self.read_file("packaging", "CUDA_BUILD_PLAN.md")
+
+        for expected in (
+            "Preferences And UI Boundary Audit",
+            "Preferences storage defaults `default_device` to `cpu`",
+            "preferences API accepts only `default_device: \"cpu\"`",
+            "Preferences panel shows `Device: CPU only`",
+            "per-job Detect GPU path with a hidden CUDA radio",
+            "visible CUDA control on the CUDA preview runtime switch",
+            "Do not expose CUDA as a saved preference",
+            "keep CUDA source/env-only",
+            "remain CPU-only/read-only",
+        ):
+            with self.subTest(expected=expected):
+                self.assertIn(expected, plan)
+
     def test_packaging_docs_cover_v050_validation_without_cuda_enablement(self):
         validation = self.read_file("packaging", "VALIDATION.md")
         packaging_readme = self.read_file("packaging", "README.md")
