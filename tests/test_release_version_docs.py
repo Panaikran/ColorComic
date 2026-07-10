@@ -158,6 +158,7 @@ class ReleaseVersionDocsTests(unittest.TestCase):
             "torch.cuda.is_available() is false",
             "model weights",
             "pass CUDA preflight before invoking PyInstaller",
+            "preview artifact unless explicitly validated and released",
             "The CPU installer remains official",
             "ColorComic-Setup-{version}-win64-cpu.exe",
         ):
@@ -166,12 +167,7 @@ class ReleaseVersionDocsTests(unittest.TestCase):
 
         self.assertTrue(os.path.exists(os.path.join(root, "packaging", "build_windows_cuda_preview.ps1")))
         self.assertTrue(os.path.exists(os.path.join(root, "packaging", "ColorComicCudaPreview.spec")))
-
-        for parts in (
-            ("packaging", "inno", "ColorComicCudaPreview.iss"),
-        ):
-            with self.subTest(path=os.path.join(*parts)):
-                self.assertFalse(os.path.exists(os.path.join(root, *parts)))
+        self.assertTrue(os.path.exists(os.path.join(root, "packaging", "inno", "ColorComicCudaPreview.iss")))
 
     def test_cuda_preview_build_script_has_safety_preflights(self):
         script = self.read_file("packaging", "build_windows_cuda_preview.ps1")
@@ -206,6 +202,22 @@ class ReleaseVersionDocsTests(unittest.TestCase):
         for forbidden in ("models\\weights", "models/weights", 'include_tree("models"'):
             with self.subTest(forbidden=forbidden):
                 self.assertNotIn(forbidden, cuda_spec)
+
+    def test_cuda_preview_inno_script_is_separate_from_cpu_installer(self):
+        cpu_inno = self.read_file("packaging", "inno", "ColorComic.iss")
+        cuda_inno = self.read_file("packaging", "inno", "ColorComicCudaPreview.iss")
+
+        self.assertIn("OutputBaseFilename=ColorComic-Setup-{#MyAppVersion}-win64-cpu", cpu_inno)
+        self.assertIn("OutputBaseFilename=ColorComic-Setup-{#MyAppVersion}-win64-cuda-preview", cuda_inno)
+        self.assertIn('#define MyAppName "ColorComic CUDA Preview"', cuda_inno)
+        self.assertIn('#define MyAppVersion "0.6.0"', cuda_inno)
+        self.assertIn('Source: "..\\..\\dist\\ColorComicCudaPreview\\*"', cuda_inno)
+        self.assertIn("Preview only", cuda_inno)
+        self.assertIn("%LOCALAPPDATA%\\ColorComic", cuda_inno)
+        self.assertIn("model weights out of dist\\ColorComicCudaPreview", cuda_inno)
+
+        self.assertNotIn("win64-cuda-preview", cpu_inno)
+        self.assertNotIn("ColorComicCudaPreview", cpu_inno)
 
     def test_packaging_docs_cover_v050_validation_without_cuda_enablement(self):
         validation = self.read_file("packaging", "VALIDATION.md")
