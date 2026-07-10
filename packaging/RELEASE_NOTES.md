@@ -1,5 +1,31 @@
 # ColorComic Release Notes
 
+## v0.7.1 - Maintenance and Correctness
+
+This maintenance release improves local configuration reliability and prevents
+duplicate standalone colorization starts.
+
+### Fixed
+
+- Runtime `.env` settings under `%LOCALAPPDATA%\ColorComic\config` now load
+  before configuration defaults; explicit environment variables retain
+  precedence.
+- A second active request to start the same standalone colorization job is
+  rejected without creating another worker.
+
+### Verified
+
+- Supported Auto-mode PDF pages remain three-channel `uint8` inputs through
+  mc-v2 normalization; no vendored inference change was required.
+
+### Unchanged
+
+- The CPU installer remains the official supported release artifact:
+  `ColorComic-Setup-0.7.1-win64-cpu.exe`.
+- CUDA remains preview-only and is not an official installer.
+- No cloud services, telemetry, accounts, frontend rewrite, or model-family
+  changes were added.
+
 ## v0.7.0 - Project and Queue Management
 
 This release makes long-running colorization batches easier to manage without

@@ -8,7 +8,7 @@ and the current unsigned installer output.
 
 - Expected output path: `dist\ColorComic\ColorComic.exe`
 - Expected installer path:
-  `packaging\inno\output\ColorComic-Setup-0.7.0-win64-cpu.exe`
+  `packaging\inno\output\ColorComic-Setup-0.7.1-win64-cpu.exe`
 - Expected build type: PyInstaller one-folder, not one-file
 - Observed local output size: about 2.17 GB for the full `dist\ColorComic`
   folder
@@ -71,7 +71,7 @@ Expected behavior:
 Expected installer output:
 
 ```text
-packaging\inno\output\ColorComic-Setup-0.7.0-win64-cpu.exe
+packaging\inno\output\ColorComic-Setup-0.7.1-win64-cpu.exe
 ```
 
 ## CUDA Preview Validation Gate
@@ -424,13 +424,24 @@ behavior, and permissions issues that a developer machine can hide.
     - Confirm queue summaries distinguish queued, paused, running, failed,
       recovery-required, and completed work.
 
-23. Failed network download handling:
+23. v0.7.1 maintenance:
+    - Confirm `%LOCALAPPDATA%\ColorComic\config\.env` values load before
+      configuration defaults while explicit environment variables still win.
+    - Start the same standalone job twice while it is active.
+      Expected: the first request starts one worker and the duplicate request
+      is rejected without replacing its queue.
+    - Confirm a job can be started again after preflight failure or terminal
+      completion.
+    - Confirm supported Auto-mode PDF pages remain three-channel `uint8` inputs
+      through the mc-v2 normalization path.
+
+24. Failed network download handling:
     - Disconnect the network or block access to Google Drive/HuggingFace.
     - Start a colorization job that needs a missing model.
     - Expected: job enters an error state and the UI shows a useful failure
       instead of hanging indefinitely.
 
-24. App close releases process and port:
+25. App close releases process and port:
     - Close the ColorComic window.
     - Confirm `ColorComic.exe` exits.
     - Confirm the localhost listening port is released:
@@ -441,7 +452,7 @@ behavior, and permissions issues that a developer machine can hide.
         Where-Object { $_.OwningProcess -eq <old-process-id> }
       ```
 
-25. SmartScreen/Defender notes:
+26. SmartScreen/Defender notes:
     - Unsigned builds may show Microsoft Defender SmartScreen warnings.
     - Defender may scan or delay first launch because the folder is large and
       contains ML/runtime DLLs.

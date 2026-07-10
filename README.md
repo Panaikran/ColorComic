@@ -30,11 +30,11 @@ Automatically colorize black-and-white comic and manga pages using deep learning
 - **Zero cloud dependency** — everything runs locally, no API keys needed
 - **Auto model download** — weights are downloaded automatically on first use
 
-## v0.7.0 Summary
+## v0.7.1 Summary
 
-ColorComic v0.7.0 adds project and queue management: pause, resume, reorder,
-retry, and remove batch jobs, with safe queue recovery after restart. The
-Windows CPU installer remains the official supported release; CUDA is preview-only.
+ColorComic v0.7.1 improves configuration reliability and prevents duplicate
+standalone job starts. The Windows CPU installer remains the official supported
+release; CUDA is preview-only.
 
 ## How It Works
 

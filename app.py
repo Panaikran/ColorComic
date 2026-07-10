@@ -870,7 +870,7 @@ def _diagnostics_payload() -> dict:
 
 
 def _app_version() -> str:
-    return os.environ.get("COLORCOMIC_VERSION", "0.7.0")
+    return os.environ.get("COLORCOMIC_VERSION", "0.7.1")
 
 
 def create_app():

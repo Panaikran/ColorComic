@@ -3,8 +3,8 @@ import re
 import unittest
 
 
-RELEASE_VERSION = "0.7.0"
-RELEASE_NOTES_VERSION = "0.7.0"
+RELEASE_VERSION = "0.7.1"
+RELEASE_NOTES_VERSION = "0.7.1"
 INSTALLER_NAME = f"ColorComic-Setup-{RELEASE_VERSION}-win64-cpu.exe"
 
 
@@ -45,13 +45,13 @@ class ReleaseVersionDocsTests(unittest.TestCase):
     def test_readme_mentions_current_release_summary(self):
         readme = self.read_file("README.md")
 
-        self.assertIn("## v0.7.0 Summary", readme)
-        self.assertIn("queue management", readme)
+        self.assertIn("## v0.7.1 Summary", readme)
+        self.assertIn("duplicate", readme)
 
     def test_runtime_version_matches_current_release(self):
         app_module = self.read_file("app.py")
 
-        self.assertIn('os.environ.get("COLORCOMIC_VERSION", "0.7.0")', app_module)
+        self.assertIn('os.environ.get("COLORCOMIC_VERSION", "0.7.1")', app_module)
 
     def test_packaging_docs_cover_batch_validation(self):
         validation = self.read_file("packaging", "VALIDATION.md")
@@ -394,9 +394,27 @@ class ReleaseVersionDocsTests(unittest.TestCase):
             "ColorComic-Setup-0.7.0-win64-cpu.exe",
         ):
             with self.subTest(expected=expected):
-                self.assertIn(expected, latest_section)
+                self.assertInNormalized(expected, latest_section)
 
         self.assertNotIn("CUDA is an official installer", latest_section)
+
+    def test_release_notes_cover_completed_v071_work_only(self):
+        notes = self.read_file("packaging", "RELEASE_NOTES.md")
+        latest_section = notes.split("## v0.7.0", 1)[0]
+
+        for expected in (
+            "v0.7.1 - Maintenance and Correctness",
+            "Runtime `.env` settings",
+            "explicit environment variables retain precedence",
+            "same standalone colorization job",
+            "three-channel `uint8` inputs",
+            "ColorComic-Setup-0.7.1-win64-cpu.exe",
+            "CUDA remains preview-only",
+        ):
+            with self.subTest(expected=expected):
+                self.assertInNormalized(expected, latest_section)
+
+        self.assertIn("no vendored inference change was required", latest_section.lower())
 
 
 if __name__ == "__main__":
