@@ -1,4 +1,5 @@
 import json
+import importlib
 import os
 import tempfile
 import unittest
@@ -16,6 +17,8 @@ from core.queue_manifest import QueueBatchRecord, QueueJobRecord, QueueManifest,
 
 class QueueRecoveryTests(unittest.TestCase):
     def setUp(self):
+        global app
+        app = importlib.import_module("app")
         self.original_upload_folder = app.Config.UPLOAD_FOLDER
         self.original_config_dir = app.Config.CONFIG_DIR
         app.jobs.clear()
