@@ -85,5 +85,9 @@ if (-not (Test-Path -LiteralPath $SpecPath -PathType Leaf)) {
 }
 
 Write-Host "CUDA preview prerequisites passed."
-Write-Host "Model weights must remain excluded from the future CUDA preview bundle."
-Write-Host "Future build command: $PythonExe -m PyInstaller packaging\ColorComicCudaPreview.spec --clean --noconfirm"
+Write-Host "Model weights must remain excluded from the CUDA preview bundle."
+
+& $PythonExe -m PyInstaller packaging\ColorComicCudaPreview.spec --clean --noconfirm
+
+Write-Host ""
+Write-Host "CUDA preview build complete: dist\ColorComicCudaPreview\ColorComicCudaPreview.exe"

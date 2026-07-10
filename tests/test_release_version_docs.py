@@ -146,7 +146,7 @@ class ReleaseVersionDocsTests(unittest.TestCase):
 
         for expected in (
             "CUDA Preview Packaging Plan",
-            "preflight-only build wrapper",
+            "build wrapper",
             "separate from the official CPU",
             "packaging/ColorComicCudaPreview.spec",
             "packaging/build_windows_cuda_preview.ps1",
@@ -157,7 +157,7 @@ class ReleaseVersionDocsTests(unittest.TestCase):
             "torch.version.cuda",
             "torch.cuda.is_available() is false",
             "model weights",
-            "stop before invoking PyInstaller",
+            "pass CUDA preflight before invoking PyInstaller",
             "The CPU installer remains official",
             "ColorComic-Setup-{version}-win64-cpu.exe",
         ):
@@ -165,9 +165,9 @@ class ReleaseVersionDocsTests(unittest.TestCase):
                 self.assertIn(expected, plan)
 
         self.assertTrue(os.path.exists(os.path.join(root, "packaging", "build_windows_cuda_preview.ps1")))
+        self.assertTrue(os.path.exists(os.path.join(root, "packaging", "ColorComicCudaPreview.spec")))
 
         for parts in (
-            ("packaging", "ColorComicCudaPreview.spec"),
             ("packaging", "inno", "ColorComicCudaPreview.iss"),
         ):
             with self.subTest(path=os.path.join(*parts)):
@@ -189,9 +189,23 @@ class ReleaseVersionDocsTests(unittest.TestCase):
             "torch.cuda.is_available() to be true",
             "ColorComicCudaPreview.spec",
             "-m PyInstaller packaging\\ColorComicCudaPreview.spec --clean --noconfirm",
+            "dist\\ColorComicCudaPreview\\ColorComicCudaPreview.exe",
         ):
             with self.subTest(expected=expected):
                 self.assertIn(expected, script)
+
+    def test_cuda_preview_spec_is_separate_from_cpu_spec(self):
+        cpu_spec = self.read_file("packaging", "ColorComic.spec")
+        cuda_spec = self.read_file("packaging", "ColorComicCudaPreview.spec")
+
+        self.assertIn('name="ColorComic"', cpu_spec)
+        self.assertIn('name="ColorComicCudaPreview"', cuda_spec)
+        self.assertIn("CUDA preview", cuda_spec)
+        self.assertNotIn('name="ColorComicCudaPreview"', cpu_spec)
+
+        for forbidden in ("models\\weights", "models/weights", 'include_tree("models"'):
+            with self.subTest(forbidden=forbidden):
+                self.assertNotIn(forbidden, cuda_spec)
 
     def test_packaging_docs_cover_v050_validation_without_cuda_enablement(self):
         validation = self.read_file("packaging", "VALIDATION.md")
