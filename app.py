@@ -20,13 +20,20 @@ from datetime import datetime, timezone
 
 from config import Config
 from core.batch_queue import (
+    BatchRecord,
     BatchQueueError,
     STATUS_CANCELLED,
     STATUS_COMPLETED,
+    STATUS_FAILED,
+    STATUS_PAUSED,
     STATUS_QUEUED,
+    STATUS_RECOVERY_REQUIRED,
     STATUS_RUNNING,
     SingleWorkerBatchRunner,
     create_batch,
+    derive_batch_status,
+    remove_pending_job,
+    reorder_queued_job,
     transition_job,
 )
 from core.job_history import (
@@ -40,6 +47,13 @@ from core.diagnostics_bundle import create_diagnostics_bundle
 from core.device_detection import detect_device_capabilities, is_official_cpu_build, resolve_compute_device
 from core.preflight import PreflightResult, validate_colorize_preflight, validate_runtime_health
 from core.preferences import load_preferences, reset_preferences, save_preferences
+from core.queue_manifest import (
+    QueueBatchRecord,
+    QueueJobRecord,
+    QueueManifest,
+    load_queue_manifest,
+    save_queue_manifest,
+)
 
 
 jobs = {}
@@ -281,6 +295,80 @@ def _is_runtime_output_path(path: str, output_folder: str | None = None) -> bool
     return os.path.normcase(common) == os.path.normcase(output_root)
 
 
+def _is_runtime_upload_path(path: str) -> bool:
+    if not path:
+        return False
+    upload_root = os.path.abspath(Config.UPLOAD_FOLDER)
+    candidate = os.path.abspath(path)
+    try:
+        common = os.path.commonpath([upload_root, candidate])
+    except ValueError:
+        return False
+    return os.path.normcase(common) == os.path.normcase(upload_root)
+
+
+def _recovery_input_error(record) -> str | None:
+    if not _is_runtime_upload_path(record.pdf_path) or not os.path.isfile(record.pdf_path):
+        return "Source PDF is unavailable after restart."
+    if len(record.page_images) != record.page_count:
+        return "Required extracted pages are unavailable after restart."
+    for page_path in record.page_images:
+        if not _is_runtime_upload_path(page_path) or not os.path.isfile(page_path):
+            return "Required extracted page is unavailable after restart."
+    return None
+
+
+def restore_queue_manifest(path: str | None = None) -> int:
+    """Restore manifest-backed queue records without starting any work."""
+    manifest = load_queue_manifest(path)
+    if manifest is None:
+        return 0
+
+    from models.schemas import JobState
+
+    restored = 0
+    with _batch_lock:
+        for saved_batch in manifest.batches:
+            job_statuses = {}
+            for record in saved_batch.jobs:
+                error = _recovery_input_error(record)
+                status = record.status
+                if error:
+                    status = STATUS_RECOVERY_REQUIRED
+                elif status == STATUS_RUNNING:
+                    status = STATUS_RECOVERY_REQUIRED
+                    error = "Colorization was interrupted by application shutdown."
+                elif status not in {STATUS_QUEUED, STATUS_PAUSED, STATUS_FAILED}:
+                    status = STATUS_RECOVERY_REQUIRED
+                    error = "Queue state requires recovery before it can continue."
+
+                jobs[record.job_id] = JobState(
+                    job_id=record.job_id,
+                    pdf_path=record.pdf_path,
+                    page_count=record.page_count,
+                    page_images=list(record.page_images),
+                    status=status,
+                    error=error or record.error,
+                    current_step="recovery" if status == STATUS_RECOVERY_REQUIRED else "",
+                    style=record.style,
+                    device=record.device,
+                    mode=record.mode,
+                )
+                job_statuses[record.job_id] = status
+
+            batches[saved_batch.batch_id] = BatchRecord(
+                batch_id=saved_batch.batch_id,
+                job_ids=saved_batch.job_ids,
+                job_statuses=job_statuses,
+                status=derive_batch_status(job_statuses, started_at=saved_batch.started_at),
+                created_at=saved_batch.created_at,
+                started_at=saved_batch.started_at,
+                completed_at=saved_batch.completed_at,
+            )
+            restored += 1
+    return restored
+
+
 def _recent_job_payload(entry: JobHistoryEntry) -> dict:
     output_pdf_safe = _is_runtime_output_path(entry.output_pdf_path)
     output_pdf_exists = output_pdf_safe and os.path.isfile(entry.output_pdf_path)
@@ -303,9 +391,11 @@ def _recent_job_payload(entry: JobHistoryEntry) -> dict:
 def _batch_counts_payload(counts) -> dict:
     return {
         "queued": counts.queued,
+        "paused": counts.paused,
         "running": counts.running,
         "completed": counts.completed,
         "failed": counts.failed,
+        "recovery_required": counts.recovery_required,
         "cancelled": counts.cancelled,
         "total": counts.total,
     }
@@ -326,6 +416,8 @@ def _batch_job_payload(batch, job_id: str) -> dict:
         "status": status,
         "output_pdf_exists": output_pdf_exists,
         "output_pdf_safe": output_pdf_safe,
+        "retry_of_job_id": getattr(job, "retry_of_job_id", None) if job else None,
+        "attempt_number": getattr(job, "attempt_number", 1) if job else 1,
     }
     if job and isinstance(getattr(job, "page_count", None), int):
         payload["page_count"] = job.page_count
@@ -334,6 +426,20 @@ def _batch_job_payload(batch, job_id: str) -> dict:
         payload["error"] = error
     if output_pdf_exists:
         payload["download_url"] = f"/api/download/{job_id}"
+    actions = []
+    if status == STATUS_QUEUED:
+        actions = ["pause", "remove"]
+        queued_job_ids = [candidate for candidate in batch.job_ids if batch.job_statuses[candidate] == STATUS_QUEUED]
+        queue_index = queued_job_ids.index(job_id)
+        if queue_index > 0:
+            actions.append("move_up")
+        if queue_index < len(queued_job_ids) - 1:
+            actions.append("move_down")
+    elif status == STATUS_PAUSED:
+        actions = ["resume", "remove"]
+    elif status in {STATUS_FAILED, STATUS_RECOVERY_REQUIRED}:
+        actions = ["retry"]
+    payload["actions"] = actions
     return payload
 
 
@@ -352,6 +458,44 @@ def _batch_payload(batch) -> dict:
 def _store_batch_update(batch) -> None:
     with _batch_lock:
         batches[batch.batch_id] = batch
+
+
+def _queue_manifest_from_state() -> QueueManifest:
+    saved_batches = []
+    for batch in batches.values():
+        saved_jobs = []
+        for job_id in batch.job_ids:
+            job = jobs.get(job_id)
+            if job is None:
+                continue
+            saved_jobs.append(QueueJobRecord(
+                job_id=job_id,
+                status=batch.job_statuses[job_id],
+                attempt_number=getattr(job, "attempt_number", 1),
+                pdf_path=job.pdf_path,
+                page_images=tuple(job.page_images),
+                page_count=job.page_count,
+                mode=job.mode,
+                style=job.style,
+                device=job.device,
+                retry_of_job_id=getattr(job, "retry_of_job_id", None),
+                error=getattr(job, "error", None),
+            ))
+        if len(saved_jobs) != len(batch.job_ids):
+            continue
+        saved_batches.append(QueueBatchRecord(
+            batch_id=batch.batch_id,
+            job_ids=batch.job_ids,
+            jobs=tuple(saved_jobs),
+            created_at=batch.created_at,
+            started_at=batch.started_at,
+            completed_at=batch.completed_at,
+        ))
+    return QueueManifest(batches=tuple(saved_batches))
+
+
+def _persist_queue_manifest() -> None:
+    save_queue_manifest(_queue_manifest_from_state())
 
 
 def _get_batch(batch_id: str):
@@ -748,6 +892,7 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
     app.secret_key = Config.SECRET_KEY
+    restore_queue_manifest()
 
     @app.route("/")
     def index():
@@ -1004,6 +1149,133 @@ def create_app():
             "status": STATUS_CANCELLED,
             "batch": _batch_payload(batch),
         })
+
+    @app.route("/api/batches/<batch_id>/jobs/<job_id>/pause", methods=["POST"])
+    def pause_batch_job(batch_id, job_id):
+        with _batch_lock:
+            batch = batches.get(batch_id)
+            if not batch:
+                return jsonify({"error": "Batch not found"}), 404
+            if job_id not in batch.job_statuses:
+                return jsonify({"error": "Job not found"}), 404
+            if batch.job_statuses[job_id] != STATUS_QUEUED:
+                return jsonify({"error": "Only queued jobs can be paused"}), 409
+            batch = transition_job(batch, job_id, STATUS_PAUSED)
+            batches[batch_id] = batch
+            _persist_queue_manifest()
+        return jsonify({"ok": True, "job_id": job_id, "status": STATUS_PAUSED, "batch": _batch_payload(batch)})
+
+    @app.route("/api/batches/<batch_id>/jobs/<job_id>/resume", methods=["POST"])
+    def resume_batch_job(batch_id, job_id):
+        with _batch_lock:
+            batch = batches.get(batch_id)
+            if not batch:
+                return jsonify({"error": "Batch not found"}), 404
+            if job_id not in batch.job_statuses:
+                return jsonify({"error": "Job not found"}), 404
+            if batch.job_statuses[job_id] != STATUS_PAUSED:
+                return jsonify({"error": "Only paused jobs can be resumed"}), 409
+            batch = transition_job(batch, job_id, STATUS_QUEUED)
+            batches[batch_id] = batch
+            _persist_queue_manifest()
+        return jsonify({"ok": True, "job_id": job_id, "status": STATUS_QUEUED, "batch": _batch_payload(batch)})
+
+    @app.route("/api/batches/<batch_id>/jobs/<job_id>/retry", methods=["POST"])
+    def retry_batch_job(batch_id, job_id):
+        from models.schemas import JobState
+
+        with _batch_lock:
+            batch = batches.get(batch_id)
+            if not batch:
+                return jsonify({"error": "Batch not found"}), 404
+            if job_id not in batch.job_statuses or job_id not in jobs:
+                return jsonify({"error": "Job not found"}), 404
+            if batch.job_statuses[job_id] not in {STATUS_FAILED, STATUS_RECOVERY_REQUIRED}:
+                return jsonify({"error": "Only failed or recovery-required jobs can be retried"}), 409
+            parent = jobs[job_id]
+            input_error = _recovery_input_error(parent)
+            if input_error:
+                return jsonify({"error": input_error}), 409
+
+            retry_job_id = str(uuid.uuid4())[:12]
+            while retry_job_id in jobs:
+                retry_job_id = str(uuid.uuid4())[:12]
+            retry_job = JobState(
+                job_id=retry_job_id,
+                pdf_path=parent.pdf_path,
+                page_count=parent.page_count,
+                page_images=list(parent.page_images),
+                style=parent.style,
+                device=parent.device,
+                mode=parent.mode,
+                reference_image_path=parent.reference_image_path,
+                retry_of_job_id=job_id,
+                attempt_number=getattr(parent, "attempt_number", 1) + 1,
+            )
+            job_statuses = dict(batch.job_statuses)
+            job_statuses[retry_job_id] = STATUS_QUEUED
+            batch = BatchRecord(
+                batch_id=batch.batch_id,
+                job_ids=(*batch.job_ids, retry_job_id),
+                job_statuses=job_statuses,
+                status=derive_batch_status(job_statuses, started_at=batch.started_at),
+                created_at=batch.created_at,
+                started_at=batch.started_at,
+                completed_at=None,
+            )
+            jobs[retry_job_id] = retry_job
+            batches[batch_id] = batch
+            _persist_queue_manifest()
+        return jsonify({"ok": True, "job_id": retry_job_id, "status": STATUS_QUEUED, "batch": _batch_payload(batch)})
+
+    @app.route("/api/batches/<batch_id>/jobs/<job_id>/remove", methods=["POST"])
+    def remove_batch_job(batch_id, job_id):
+        with _batch_lock:
+            batch = batches.get(batch_id)
+            if not batch:
+                return jsonify({"error": "Batch not found"}), 404
+            if job_id not in batch.job_statuses:
+                return jsonify({"error": "Job not found"}), 404
+            if batch.job_statuses[job_id] not in {STATUS_QUEUED, STATUS_PAUSED}:
+                return jsonify({"error": "Job cannot be removed from its current status"}), 409
+            batch = remove_pending_job(batch, job_id)
+            jobs.pop(job_id, None)
+            batch_removed = not batch.job_ids
+            if batch_removed:
+                batches.pop(batch_id, None)
+            else:
+                batches[batch_id] = batch
+            _persist_queue_manifest()
+        return jsonify({"ok": True, "job_id": job_id, "batch_removed": batch_removed, "batch": None if batch_removed else _batch_payload(batch)})
+
+    def move_batch_job(batch_id, job_id, direction):
+        with _batch_lock:
+            batch = batches.get(batch_id)
+            if not batch:
+                return jsonify({"error": "Batch not found"}), 404
+            if job_id not in batch.job_statuses:
+                return jsonify({"error": "Job not found"}), 404
+            if batch.job_statuses[job_id] != STATUS_QUEUED:
+                return jsonify({"error": "Only queued jobs can be reordered"}), 409
+            queued_job_ids = [candidate for candidate in batch.job_ids if batch.job_statuses[candidate] == STATUS_QUEUED]
+            queue_index = queued_job_ids.index(job_id)
+            target_index = queue_index + direction
+            if target_index < 0:
+                return jsonify({"error": "Queued job is already first"}), 409
+            if target_index >= len(queued_job_ids):
+                return jsonify({"error": "Queued job is already last"}), 409
+            batch = reorder_queued_job(batch, job_id, queued_job_ids[target_index])
+            batches[batch_id] = batch
+            _persist_queue_manifest()
+        return jsonify({"ok": True, "job_id": job_id, "batch": _batch_payload(batch)})
+
+    @app.route("/api/batches/<batch_id>/jobs/<job_id>/move-up", methods=["POST"])
+    def move_batch_job_up(batch_id, job_id):
+        return move_batch_job(batch_id, job_id, -1)
+
+    @app.route("/api/batches/<batch_id>/jobs/<job_id>/move-down", methods=["POST"])
+    def move_batch_job_down(batch_id, job_id):
+        return move_batch_job(batch_id, job_id, 1)
 
     @app.route("/pages/<job_id>/<int:page_num>")
     def serve_page(job_id, page_num):

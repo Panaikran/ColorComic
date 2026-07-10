@@ -504,14 +504,20 @@ function appendBatchListItem(list, primary, secondary, statusLabel) {
 
 function formatStatus(status) {
     if (!status) return 'Unknown';
+    if (status === 'recovery_required') return 'Recovery required';
     return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+function formatRetryAttempt(job) {
+    if (!Number.isInteger(job.attempt_number) || job.attempt_number <= 1) return '';
+    return `Retry ${job.attempt_number - 1}`;
 }
 
 function renderBatchCounts(counts) {
     if (!batchCounts || !counts) return;
 
     batchCounts.replaceChildren();
-    ['queued', 'running', 'completed', 'failed', 'cancelled'].forEach(status => {
+    ['queued', 'paused', 'running', 'failed', 'recovery_required', 'completed', 'cancelled'].forEach(status => {
         const item = document.createElement('span');
         item.className = `status batch-status-${status}`;
         item.textContent = `${formatStatus(status)}: ${counts[status] || 0}`;
@@ -520,23 +526,45 @@ function renderBatchCounts(counts) {
     batchCounts.style.display = 'flex';
 }
 
-async function cancelQueuedBatchJob(jobId, statusElement, button) {
+const queueActionLabels = {
+    pause: 'Pause',
+    resume: 'Resume',
+    retry: 'Retry',
+    remove: 'Remove',
+    move_up: 'Move Up',
+    move_down: 'Move Down',
+};
+
+const queueActionPaths = {
+    pause: 'pause',
+    resume: 'resume',
+    retry: 'retry',
+    remove: 'remove',
+    move_up: 'move-up',
+    move_down: 'move-down',
+};
+
+async function applyQueueJobAction(job, action, statusElement, button) {
     if (!currentBatchId) return;
 
+    const actionPath = queueActionPaths[action];
+    const label = queueActionLabels[action] || 'Update';
+    if (!actionPath) return;
     statusElement.textContent = '';
     button.disabled = true;
     try {
         const response = await fetch(
-            `/api/batches/${encodeURIComponent(currentBatchId)}/jobs/${encodeURIComponent(jobId)}/cancel`,
+            `/api/batches/${encodeURIComponent(currentBatchId)}/jobs/${encodeURIComponent(job.job_id)}/${actionPath}`,
             { method: 'POST' },
         );
         const data = await response.json();
         if (!response.ok) {
-            throw new Error(data && data.error ? data.error : 'Could not cancel this job.');
+            throw new Error(data && data.error ? data.error : 'Could not update this job.');
         }
+        statusElement.textContent = `${label} complete.`;
         await pollBatchStatus(currentBatchId);
     } catch (error) {
-        statusElement.textContent = error && error.message ? error.message : 'Could not cancel this job.';
+        statusElement.textContent = error && error.message ? error.message : 'Could not update this job.';
         button.disabled = false;
     }
 }
@@ -545,6 +573,8 @@ function renderBatchJobs(jobs) {
     batchAcceptedList.replaceChildren();
     jobs.forEach(job => {
         const item = document.createElement('li');
+        item.className = `batch-job batch-job-${job.status || 'unknown'}`;
+        if (job.status === 'recovery_required') item.classList.add('batch-job-recovery_required');
         const title = document.createElement('strong');
         title.textContent = job.original_filename || job.filename || job.job_id;
         item.appendChild(title);
@@ -554,13 +584,15 @@ function renderBatchJobs(jobs) {
         if (Number.isInteger(job.page_count)) {
             details.push(`${job.page_count} page${job.page_count === 1 ? '' : 's'}`);
         }
+        const retryAttempt = formatRetryAttempt(job);
+        if (retryAttempt) details.push(retryAttempt);
         if (job.error) details.push(job.error);
         const meta = document.createElement('span');
         meta.className = 'text-dim';
         meta.textContent = ` - ${details.join(' - ')}`;
         item.appendChild(meta);
 
-        if (job.status === 'queued') {
+        if (Array.isArray(job.actions) && job.actions.length) {
             const actionStatus = document.createElement('p');
             actionStatus.className = 'text-dim recent-output-action-status';
             actionStatus.setAttribute('role', 'status');
@@ -569,15 +601,17 @@ function renderBatchJobs(jobs) {
             const actions = document.createElement('div');
             actions.className = 'recent-output-actions';
 
-            const cancel = document.createElement('button');
-            cancel.className = 'btn btn-secondary btn-sm';
-            cancel.type = 'button';
-            cancel.textContent = 'Cancel';
-            cancel.setAttribute('aria-label', `Cancel ${job.original_filename || job.filename || job.job_id}`);
-            cancel.addEventListener('click', () => {
-                cancelQueuedBatchJob(job.job_id, actionStatus, cancel);
+            job.actions.forEach(action => {
+                const label = queueActionLabels[action];
+                if (!label) return;
+                const button = document.createElement('button');
+                button.className = 'btn btn-secondary btn-sm';
+                button.type = 'button';
+                button.textContent = label;
+                button.setAttribute('aria-label', `${label} ${job.original_filename || job.filename || job.job_id}`);
+                button.addEventListener('click', () => applyQueueJobAction(job, action, actionStatus, button));
+                actions.appendChild(button);
             });
-            actions.appendChild(cancel);
 
             item.appendChild(actionStatus);
             item.appendChild(actions);
@@ -662,12 +696,35 @@ function startBatchPolling(batchId) {
     }, 2000);
 }
 
+function getBatchSummary(data) {
+    const counts = data.counts || {};
+    if (counts.paused > 0 && counts.queued === 0 && counts.running === 0) {
+        return 'Queue paused. Worker is idle because all remaining jobs are paused.';
+    }
+    if (counts.recovery_required > 0) {
+        return 'Recovery required after restart. Retry or remove affected jobs.';
+    }
+    if (counts.failed > 0) {
+        return 'Retryable failures remain. Retry failed jobs to continue.';
+    }
+    if (data.status === 'completed') {
+        return 'Queue completed successfully.';
+    }
+    if (counts.running > 0) {
+        return 'Worker is processing queued work.';
+    }
+    if (counts.queued > 0) {
+        return `Queue ready: ${counts.queued} queued.`;
+    }
+    return `Batch status: ${formatStatus(data.status)}`;
+}
+
 function renderBatchStatus(data) {
     if (!data) return;
 
     currentBatchId = data.batch_id || currentBatchId;
     batchIdText.textContent = currentBatchId ? `Batch ID: ${currentBatchId}` : 'No batch was created.';
-    batchStatusText.textContent = `Batch status: ${formatStatus(data.status)}`;
+    batchStatusText.textContent = getBatchSummary(data);
     renderBatchCounts(data.counts);
     renderBatchJobs(Array.isArray(data.jobs) ? data.jobs : []);
     if (startBatchBtn) {

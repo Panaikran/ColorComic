@@ -34,6 +34,8 @@ official supported Windows installer CPU-only.
 ### Unchanged
 
 - The CPU installer remains the official supported release.
+- The official CPU installer output is
+  `ColorComic-Setup-0.6.0-win64-cpu.exe`.
 - CUDA remains preview/experimental and is not an official installer.
 - No CUDA Preferences controls are exposed.
 - No model behavior changes.

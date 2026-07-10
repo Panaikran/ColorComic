@@ -113,8 +113,9 @@ class BatchUploadUiTests(unittest.TestCase):
         self.assertIn("function renderBatchStatus(data)", script)
         self.assertIn("function renderBatchCounts(counts)", script)
         self.assertIn("function renderBatchJobs(jobs)", script)
-        self.assertIn("'queued', 'running', 'completed', 'failed', 'cancelled'", script)
+        self.assertIn("'queued', 'paused', 'running', 'failed', 'recovery_required', 'completed', 'cancelled'", script)
         self.assertIn("if (job.error) details.push(job.error)", script)
+        self.assertIn("item.className = `batch-job batch-job-${job.status || 'unknown'}`", script)
 
     def test_upload_script_shows_completed_batch_output_actions_only_when_safe(self):
         root = os.getcwd()
@@ -130,30 +131,69 @@ class BatchUploadUiTests(unittest.TestCase):
         self.assertIn("openRecentOutputPdf(job.job_id, actionStatus, revealPdf)", batch_section)
         self.assertIn("openRecentOutputFolder(job.job_id, actionStatus, openFolder)", batch_section)
 
-    def test_upload_script_shows_cancel_for_queued_batch_jobs_only(self):
+    def test_upload_script_renders_server_provided_queue_controls_with_accessible_names(self):
         root = os.getcwd()
         with open(os.path.join(root, "static", "js", "upload.js"), encoding="utf-8") as handle:
             script = handle.read()
 
         batch_section = script.split("function renderBatchJobs(jobs)", 1)[1].split("function stopBatchPolling()", 1)[0]
-        self.assertIn("if (job.status === 'queued')", batch_section)
-        self.assertIn("cancel.textContent = 'Cancel'", batch_section)
-        self.assertIn("cancel.setAttribute('aria-label', `Cancel ${job.original_filename || job.filename || job.job_id}`)", batch_section)
-        self.assertIn("cancelQueuedBatchJob(job.job_id, actionStatus, cancel)", batch_section)
-        self.assertNotIn("job.status === 'running'", batch_section)
-        self.assertNotIn("job.status === 'failed'", batch_section)
-        self.assertNotIn("job.status === 'cancelled'", batch_section)
+        self.assertIn("const queueActionLabels = {", script)
+        self.assertIn("pause: 'Pause'", script)
+        self.assertIn("resume: 'Resume'", script)
+        self.assertIn("retry: 'Retry'", script)
+        self.assertIn("remove: 'Remove'", script)
+        self.assertIn("move_up: 'Move Up'", script)
+        self.assertIn("move_down: 'Move Down'", script)
+        self.assertIn("Array.isArray(job.actions)", batch_section)
+        self.assertIn("button.setAttribute('aria-label', `${label} ${job.original_filename || job.filename || job.job_id}`)", batch_section)
+        self.assertIn("button.addEventListener('click', () => applyQueueJobAction(job, action, actionStatus, button))", batch_section)
+        self.assertIn("actionStatus.setAttribute('role', 'status')", batch_section)
+        self.assertIn("actionStatus.setAttribute('aria-live', 'polite')", batch_section)
 
-    def test_upload_script_cancels_queued_job_and_refreshes_batch_status(self):
+    def test_upload_script_applies_queue_action_and_refreshes_batch_status(self):
         root = os.getcwd()
         with open(os.path.join(root, "static", "js", "upload.js"), encoding="utf-8") as handle:
             script = handle.read()
 
-        self.assertIn("async function cancelQueuedBatchJob(jobId, statusElement, button)", script)
-        self.assertIn("`/api/batches/${encodeURIComponent(currentBatchId)}/jobs/${encodeURIComponent(jobId)}/cancel`", script)
+        self.assertIn("async function applyQueueJobAction(job, action, statusElement, button)", script)
+        self.assertIn("const actionPath = queueActionPaths[action]", script)
+        self.assertIn("`/api/batches/${encodeURIComponent(currentBatchId)}/jobs/${encodeURIComponent(job.job_id)}/${actionPath}`", script)
         self.assertIn("{ method: 'POST' }", script)
         self.assertIn("await pollBatchStatus(currentBatchId)", script)
-        self.assertIn("Could not cancel this job.", script)
+        self.assertIn("Could not update this job.", script)
+        self.assertIn("button.disabled = true", script)
+
+    def test_upload_script_shows_retry_attempts_and_recovery_state(self):
+        root = os.getcwd()
+        with open(os.path.join(root, "static", "js", "upload.js"), encoding="utf-8") as handle:
+            script = handle.read()
+
+        self.assertIn("function formatRetryAttempt(job)", script)
+        self.assertIn("return `Retry ${job.attempt_number - 1}`", script)
+        self.assertIn("const retryAttempt = formatRetryAttempt(job)", script)
+        self.assertIn("if (retryAttempt) details.push(retryAttempt)", script)
+        self.assertIn("batch-job-recovery_required", script)
+
+    def test_upload_script_summarizes_paused_and_idle_queue_state(self):
+        root = os.getcwd()
+        with open(os.path.join(root, "static", "js", "upload.js"), encoding="utf-8") as handle:
+            script = handle.read()
+
+        self.assertIn("function getBatchSummary(data)", script)
+        self.assertIn("counts.paused > 0 && counts.queued === 0 && counts.running === 0", script)
+        self.assertIn("Queue paused. Worker is idle because all remaining jobs are paused.", script)
+
+    def test_upload_script_summarizes_recovery_retry_and_completion_states(self):
+        root = os.getcwd()
+        with open(os.path.join(root, "static", "js", "upload.js"), encoding="utf-8") as handle:
+            script = handle.read()
+
+        self.assertIn("counts.recovery_required > 0", script)
+        self.assertIn("Recovery required after restart.", script)
+        self.assertIn("counts.failed > 0", script)
+        self.assertIn("Retryable failures remain.", script)
+        self.assertIn("Queue completed successfully.", script)
+        self.assertIn("batchStatusText.textContent = getBatchSummary(data)", script)
 
     def test_upload_script_preserves_single_pdf_colorization_flow(self):
         root = os.getcwd()

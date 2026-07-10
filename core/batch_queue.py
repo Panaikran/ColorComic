@@ -8,6 +8,8 @@ from typing import Callable, Mapping
 
 
 STATUS_QUEUED = "queued"
+STATUS_PAUSED = "paused"
+STATUS_RECOVERY_REQUIRED = "recovery_required"
 STATUS_RUNNING = "running"
 STATUS_COMPLETED = "completed"
 STATUS_FAILED = "failed"
@@ -16,6 +18,8 @@ STATUS_CANCELLED = "cancelled"
 ALLOWED_STATUSES = frozenset(
     {
         STATUS_QUEUED,
+        STATUS_PAUSED,
+        STATUS_RECOVERY_REQUIRED,
         STATUS_RUNNING,
         STATUS_COMPLETED,
         STATUS_FAILED,
@@ -31,7 +35,9 @@ TERMINAL_STATUSES = frozenset(
 )
 
 _JOB_TRANSITIONS = {
-    STATUS_QUEUED: frozenset({STATUS_RUNNING, STATUS_CANCELLED}),
+    STATUS_QUEUED: frozenset({STATUS_PAUSED, STATUS_RUNNING, STATUS_CANCELLED}),
+    STATUS_PAUSED: frozenset({STATUS_QUEUED, STATUS_CANCELLED}),
+    STATUS_RECOVERY_REQUIRED: frozenset(),
     STATUS_RUNNING: frozenset({STATUS_COMPLETED, STATUS_FAILED, STATUS_CANCELLED}),
     STATUS_COMPLETED: frozenset(),
     STATUS_FAILED: frozenset(),
@@ -55,6 +61,8 @@ def utc_now_iso() -> str:
 @dataclass(frozen=True)
 class BatchCounts:
     queued: int = 0
+    paused: int = 0
+    recovery_required: int = 0
     running: int = 0
     completed: int = 0
     failed: int = 0
@@ -62,7 +70,7 @@ class BatchCounts:
 
     @property
     def total(self) -> int:
-        return self.queued + self.running + self.completed + self.failed + self.cancelled
+        return self.queued + self.paused + self.recovery_required + self.running + self.completed + self.failed + self.cancelled
 
 
 @dataclass(frozen=True)
@@ -119,6 +127,8 @@ def count_statuses(job_statuses: Mapping[str, str]) -> BatchCounts:
 
     return BatchCounts(
         queued=counts[STATUS_QUEUED],
+        paused=counts[STATUS_PAUSED],
+        recovery_required=counts[STATUS_RECOVERY_REQUIRED],
         running=counts[STATUS_RUNNING],
         completed=counts[STATUS_COMPLETED],
         failed=counts[STATUS_FAILED],
@@ -176,6 +186,9 @@ def derive_batch_status(job_statuses: Mapping[str, str], started_at: str | None 
     if counts.running > 0:
         return STATUS_RUNNING
 
+    if counts.total == 0:
+        return STATUS_CANCELLED
+
     terminal_count = counts.completed + counts.failed + counts.cancelled
     if terminal_count == counts.total:
         if counts.failed > 0:
@@ -183,6 +196,12 @@ def derive_batch_status(job_statuses: Mapping[str, str], started_at: str | None 
         if counts.completed > 0:
             return STATUS_COMPLETED
         return STATUS_CANCELLED
+
+    if counts.queued == 0 and counts.recovery_required > 0:
+        return STATUS_RECOVERY_REQUIRED
+
+    if counts.queued == 0 and counts.paused > 0:
+        return STATUS_PAUSED
 
     if started_at is not None or terminal_count > 0:
         return STATUS_RUNNING
@@ -194,6 +213,59 @@ def next_queued_job_id(batch: BatchRecord) -> str | None:
         if batch.job_statuses[job_id] == STATUS_QUEUED:
             return job_id
     return None
+
+
+def reorder_queued_job(batch: BatchRecord, job_id: str, before_job_id: str) -> BatchRecord:
+    if job_id not in batch.job_statuses or before_job_id not in batch.job_statuses:
+        raise BatchQueueError("Job is not part of this batch")
+    if batch.job_statuses[job_id] != STATUS_QUEUED:
+        raise BatchQueueError("Only queued jobs can be reordered")
+    if batch.job_statuses[before_job_id] != STATUS_QUEUED:
+        raise BatchQueueError("Queued jobs can only be reordered among queued jobs")
+    if job_id == before_job_id:
+        return batch
+
+    job_ids = list(batch.job_ids)
+    job_index = job_ids.index(job_id)
+    before_job_index = job_ids.index(before_job_id)
+    job_ids[job_index], job_ids[before_job_index] = job_ids[before_job_index], job_ids[job_index]
+    return replace(batch, job_ids=tuple(job_ids))
+
+
+def remove_queued_job(batch: BatchRecord, job_id: str, now: str | None = None) -> BatchRecord:
+    if job_id not in batch.job_statuses:
+        raise BatchQueueError(f"Job is not part of this batch: {job_id}")
+    if batch.job_statuses[job_id] != STATUS_QUEUED:
+        raise BatchQueueError("Only queued jobs can be removed")
+
+    return _remove_job(batch, job_id, now)
+
+
+def remove_pending_job(batch: BatchRecord, job_id: str, now: str | None = None) -> BatchRecord:
+    if job_id not in batch.job_statuses:
+        raise BatchQueueError(f"Job is not part of this batch: {job_id}")
+    if batch.job_statuses[job_id] not in {STATUS_QUEUED, STATUS_PAUSED}:
+        raise BatchQueueError("Only queued or paused jobs can be removed")
+
+    return _remove_job(batch, job_id, now)
+
+
+def _remove_job(batch: BatchRecord, job_id: str, now: str | None = None) -> BatchRecord:
+
+    updated_statuses = dict(batch.job_statuses)
+    del updated_statuses[job_id]
+    new_status = derive_batch_status(updated_statuses, started_at=batch.started_at)
+    completed_at = batch.completed_at
+    if completed_at is None and new_status in TERMINAL_STATUSES:
+        completed_at = now or utc_now_iso()
+
+    return replace(
+        batch,
+        job_ids=tuple(existing_job_id for existing_job_id in batch.job_ids if existing_job_id != job_id),
+        job_statuses=updated_statuses,
+        status=new_status,
+        completed_at=completed_at,
+    )
 
 
 class SingleWorkerBatchRunner:
@@ -232,8 +304,10 @@ class SingleWorkerBatchRunner:
         failed_job_ids: list[str] = []
         current_batch = batch
 
-        while not current_batch.is_terminal:
+        while True:
             current_batch = self._refresh(current_batch)
+            if current_batch.is_terminal:
+                break
             job_id = next_queued_job_id(current_batch)
             if job_id is None:
                 break
